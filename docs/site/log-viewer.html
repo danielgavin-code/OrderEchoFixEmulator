@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log viewer - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html" aria-current="page">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="log-viewer">Log viewer</h1>
+<p><code>orderecho_LogView.py</code> reads FIX logs and explains them. It is a separate
+program: it never connects to anything, never writes to a log, and works just
+as well on a log some other engine wrote — a QuickFIX <code>messages.log</code>, a
+counterparty's file, or a handful of lines pasted into a file.</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_LogView.py view logs/fix/*.log
+</code></pre>
+<p>Four subcommands: <code>view</code>, <code>timeline</code>, <code>stats</code> and <code>serve</code>.</p>
+<h2 id="view">view</h2>
+<p>One line per message, in the order things happened:</p>
+<pre><code>20260927-09:36:40.922 --&gt; agent42            1 Logon                  141=Y 108=30
+20260927-09:37:00.813 --&gt; agent42            2 New Order              Buy 1000 AAPL Limit @227.50 11=DEMO-1
+20260927-09:37:00.836 &lt;-- agent42            2 Execution Report       New/New cum=0 lv=1000 avg=0.0000 11=DEMO-1
+20260927-09:37:01.411 &lt;-- agent42            3 Execution Report       Fill/Filled 1000@227.50 cum=1000 lv=0 11=DEMO-1
+</code></pre>
+<p>The columns are the timestamp, the direction, the session, MsgSeqNum, the
+message type by name, and a summary that depends on the type. <code>--&gt;</code> is inbound
+(the client to us), <code>&lt;--</code> is outbound.</p>
+<p>Several files are <strong>merged by time</strong>, not read one after another, so two
+sessions logging at once read as one conversation. A line with no timestamp of
+its own stays with the stamped line above it.</p>
+<p>A replace or a cancel says what it is changing:</p>
+<pre><code>--&gt; agent42  5 Order Cancel/Replace Request  Replace DEMO-1-&gt;DEMO-2-R qty 500-&gt;800 px 10.00-&gt;10.50
+--&gt; agent42  6 Order Cancel Request          Cancel DEMO-2-R-&gt;DEMO-3-C
+</code></pre>
+<p>The old values come from the earlier messages in the log; when the log does not
+go back that far, the row just states what is being asked for.</p>
+<h3 id="filters">Filters</h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Keeps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--session agent42</code></td>
+<td>one session</td>
+</tr>
+<tr>
+<td><code>--msg-type D,8</code></td>
+<td>those message types</td>
+</tr>
+<tr>
+<td><code>--dir in</code> / <code>out</code> / <code>disc</code></td>
+<td>one direction</td>
+</tr>
+<tr>
+<td><code>--clordid C-1</code></td>
+<td>the whole chain that ClOrdID belongs to</td>
+</tr>
+<tr>
+<td><code>--order-id O-...</code></td>
+<td>the same, by OrderID</td>
+</tr>
+<tr>
+<td><code>--symbol AAPL</code></td>
+<td>one symbol</td>
+</tr>
+<tr>
+<td><code>--since 09:00</code> / <code>--until 09:05</code></td>
+<td>a time window</td>
+</tr>
+<tr>
+<td><code>--injected</code></td>
+<td>only deliberate mischief</td>
+</tr>
+<tr>
+<td><code>--rejects</code></td>
+<td>only <code>3</code>, <code>j</code>, <code>9</code> and <code>8</code> with <code>39=8</code></td>
+</tr>
+<tr>
+<td><code>--grep TEXT</code></td>
+<td>raw substring match</td>
+</tr>
+</tbody>
+</table>
+<p><code>--clordid</code> and <code>--order-id</code> follow the chain: give any ClOrdID from a
+new → replace → replace → cancel sequence and you get all of it, including the
+reports and any cancel rejects.</p>
+<h3 id="decoding">Decoding</h3>
+<p><code>--decode</code> expands every field with its name and, where the tag is enumerated,
+the meaning of the value:</p>
+<pre><code>         11  ClOrdID                  = DEMO-1790501832816-4-R
+         41  OrigClOrdID              = DEMO-1790501828816-3
+         39  OrdStatus                = 0  (New)
+        150  ExecType                 = 5  (Replace)
+         32  LastShares               = 0
+</code></pre>
+<p>Names are version-aware: tag 32 is <code>LastShares</code> in 4.2 and <code>LastQty</code> in 4.4.
+See <a href="#tag-names">Tag names</a>.</p>
+<h3 id="flags">Flags</h3>
+<p>A message that is unusual says so at the end of its line:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INJECTED</code></td>
+<td>the emulator broke this on purpose</td>
+</tr>
+<tr>
+<td><code>POSSDUP</code></td>
+<td><code>43=Y</code>, a resend</td>
+</tr>
+<tr>
+<td><code>BAD-CHECKSUM</code></td>
+<td>tag 10 does not match the body</td>
+</tr>
+<tr>
+<td><code>BAD-LENGTH</code></td>
+<td>tag 9 does not match the body</td>
+</tr>
+</tbody>
+</table>
+<p>A message with broken framing is <strong>kept and flagged</strong>, never dropped — it is
+usually the thing you were looking for.</p>
+<h3 id="following">Following</h3>
+<p><code>--follow</code> keeps printing as the engine writes, picks up the next day's file
+when the date rolls over, and survives a truncated file. <code>--interval</code> sets the
+poll, default one second.</p>
+<p><code>--no-color</code> drops the ANSI codes; colour is off automatically when the output
+is not a terminal or <code>NO_COLOR</code> is set. <code>--me OUR-COMPID</code> lets the parser infer
+direction from SenderCompID and TargetCompID in logs that do not record one.</p>
+<h2 id="timeline">timeline</h2>
+<pre><code class="language-sh">.venv/bin/python orderecho_LogView.py timeline logs/fix/*.log --clordid DEMO-1
+</code></pre>
+<p>This prints one order's whole life — new, replaced, replaced again, cancelled,
+rejected, however it went — and then runs consistency checks over it.</p>
+<pre><code>Order chain for DEMO-1790501832816-4-R
+  ClOrdIDs: DEMO-...-3, DEMO-...-4-R, DEMO-...-5-C
+  OrderID : O-20260927-093636-3
+
+  time                  dir  type                 exec/status            qty   cum  leaves
+  2026-09-27T09:37:08.817 --&gt;  New Order          - / -                  500     -       -
+  2026-09-27T09:37:09.661 &lt;--  Execution Report   0 (New) / 0 (New)      500     0     500
+  2026-09-27T09:37:12.819 &lt;--  Execution Report   5 (Replace) / 0 (New)  800     0     800
+  2026-09-27T09:37:16.975 &lt;--  Execution Report   4 (Canceled) / 4 (…)   800     0       0
+
+Checks
+  [PASS] cum_qty_monotonic: CumQty rose to 0 without ever falling
+  ...
+  verdict: PASS
+</code></pre>
+<p>Each check prints the rule it enforces and, when it fails, where in the log it
+went wrong — <code>seq=7 17=E-4 agent42_20260927.log:22</code>.</p>
+<p>A replayed message — <code>43=Y</code> repeating an ExecID already seen — is shown but
+excluded from the checks, so answering a ResendRequest does not look like a
+duplicate fill.</p>
+<h3 id="exit-codes">Exit codes</h3>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td>every check passed</td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td>at least one warning</td>
+</tr>
+<tr>
+<td><code>2</code></td>
+<td>at least one failure, or no such order</td>
+</tr>
+</tbody>
+</table>
+<p>So a script can just look at the exit status.</p>
+<h3 id="the-checks">The checks</h3>
+<p>There are 11 checks.</p>
+<table>
+<thead>
+<tr>
+<th>check</th>
+<th>what it means</th>
+<th>the rule it enforces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cum_qty_monotonic</code></td>
+<td>CumQty (14) may only ever go up across a chain's reports.</td>
+<td>CumQty never decreases</td>
+</tr>
+<tr>
+<td><code>working_quantities</code></td>
+<td>While an order is working, CumQty + LeavesQty == OrderQty.</td>
+<td>working states: CumQty + LeavesQty == OrderQty</td>
+</tr>
+<tr>
+<td><code>terminal_quantities</code></td>
+<td>A terminal report leaves nothing open; a fill has filled it all.</td>
+<td>terminal states: LeavesQty == 0, and 39=2 implies CumQty == OrderQty</td>
+</tr>
+<tr>
+<td><code>fill_quantities_sum</code></td>
+<td>The fills add up to the final CumQty.</td>
+<td>sum of LastQty over fills == final CumQty</td>
+</tr>
+<tr>
+<td><code>avg_px</code></td>
+<td>AvgPx is the quantity-weighted mean of the fills, to 0.0001.</td>
+<td>AvgPx == sum(LastQty x LastPx) / CumQty, within 0.0001</td>
+</tr>
+<tr>
+<td><code>exec_ids_unique</code></td>
+<td>Every ExecutionReport in a chain has its own ExecID.</td>
+<td>ExecIDs are unique within the chain</td>
+</tr>
+<tr>
+<td><code>order_id_constant</code></td>
+<td>One order keeps one OrderID, however often its ClOrdID changes.</td>
+<td>OrderID is constant across the chain</td>
+</tr>
+<tr>
+<td><code>nothing_after_terminal</code></td>
+<td>Once an order is done, nothing more happens to it.</td>
+<td>no state change after a terminal report (replays excepted)</td>
+</tr>
+<tr>
+<td><code>version_rules</code></td>
+<td>4.4 fills are 150=F and carry no tag 20; 4.2 fills are 150=1 or 2.</td>
+<td>ExecType and ExecTransType match the message's FIX version</td>
+</tr>
+<tr>
+<td><code>requests_answered</code></td>
+<td>Every order request in the chain got some answer.</td>
+<td>each D/F/G is answered by an ER, a cancel reject or a Reject</td>
+</tr>
+<tr>
+<td><code>framing_intact</code></td>
+<td>No message in the chain arrived with a broken CheckSum or BodyLength.</td>
+<td>every message in the chain is correctly framed (9 and 10 agree)</td>
+</tr>
+</tbody>
+</table>
+<p>Only <code>requests_answered</code> and <code>framing_intact</code> can warn rather than fail. A log
+that stops mid-conversation has unanswered requests through no fault of the
+emulator, and a broken message means the contents cannot be trusted rather than
+that they are wrong. Everything else describes a state that cannot be right.</p>
+<p>A check that raises is itself a failure, named as one. A malformed log should
+not take the tool down.</p>
+<h2 id="stats">stats</h2>
+<pre><code class="language-sh">.venv/bin/python orderecho_LogView.py stats logs/fix/*.log
+</code></pre>
+<p>Messages per session, per type and per direction, the time span, how many lines
+could not be parsed, and the reject reasons with their counts.</p>
+<pre><code>42 message(s) from 3 file(s)
+  first: 2026-09-27T09:36:40.922000+00:00
+  last : 2026-09-27T09:39:03.530000+00:00
+
+By message type
+  8 Execution Report              15
+  D New Order                     9
+
+Rejects by reason
+  8: 103=0 (Broker/Exchange Option)  3
+  8: 103=3 (Order Exceeds Limit)     2
+</code></pre>
+<p>It streams, so the size of the file does not decide the memory it uses: a
+100,000-message log is a few seconds and a fraction of a megabyte.</p>
+<h2 id="the-web-viewer">The web viewer</h2>
+<pre><code class="language-sh">.venv/bin/python orderecho_LogView.py serve logs/fix/*.log
+# FIX log viewer on http://127.0.0.1:8091  (42 messages from 3 file(s))
+</code></pre>
+<p>The same thing in a browser: a filter bar, a live-updating message list, a
+decoded field table for whichever message you click, and a timeline with its
+checks. It polls once a second, so it keeps up with a running engine.</p>
+<p>The list shows exactly what the CLI shows — the same code produces both, so
+they cannot drift.</p>
+<div class="callout warn">
+<p><span class="label">Loopback only</span>
+It binds to loopback and <strong>refuses any other host</strong>. There is no
+authentication, and the logs contain every order that went through the
+emulator.</p>
+</div>
+<p>When the control API is enabled the engine serves the same viewer over its own
+logs at <code>http://127.0.0.1:8090/viewer</code>, and</p>
+<pre><code class="language-sh">curl -s localhost:8090/orders/O-20260927-093636-1/timeline
+</code></pre>
+<p>returns that order's timeline and checks as JSON.</p>
+<h2 id="tag-names">Tag names</h2>
+<p>Names and enum meanings come from <code>dictionaries/fix_tags.json</code> — FIXReader's
+table, read and never modified — plus <code>dictionaries/overlay.json</code>, a small
+hand-written file that guarantees the tags this emulator actually uses and
+records where 4.2 and 4.4 disagree.</p>
+<p>The overlay wins wherever the two differ, because it is the one that knows
+about versions: tag 32 is <code>LastShares</code> in 4.2 and <code>LastQty</code> in 4.4, and <code>150=F</code>
+is Trade in 4.4 where 4.2 has <code>1</code> and <code>2</code>.</p>
+<p>If the base file is missing, unreadable, or not the shape we expect, the viewer
+runs on the overlay alone and says so rather than failing.</p>
+<h2 id="reading-somebody-elses-log">Reading somebody else's log</h2>
+<p>Nothing above is specific to this emulator. A QuickFIX-style
+<code>&lt;timestamp&gt; : &lt;message&gt;</code> log, an ISO-stamped log, <code>|</code> or SOH or <code>^A</code>
+delimiters, several messages on one line, garbage lines in between — all of it
+parses, and what cannot be parsed is counted rather than thrown away.</p>
+<p>QuickFIX logs do not record direction, so name your side:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_LogView.py view FIX.4.4-BUYSIDE-BROKER.messages.log --me BROKER
+</code></pre>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

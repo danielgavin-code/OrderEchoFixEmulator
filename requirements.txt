@@ -1,0 +1,9 @@
+simplefix
+pyyaml
+pytest
+pytest-asyncio
+yfinance
+fastapi
+uvicorn
+httpx
+markdown

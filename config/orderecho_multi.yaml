@@ -1,0 +1,112 @@
+# Three sessions on one engine: two sharing a port and told apart by their
+# FIX version, one on a port of its own with its own rules and a tighter band.
+
+engine:
+  host: 127.0.0.1
+  fix_port: 9878                # sessions without their own port use this
+  default_session: agent42      # which session the unscoped API routes act on
+
+defaults:                       # every session starts from these
+  heartbeat_grace_pct: 20
+  logout_timeout_sec: 10
+  resend_mode: replay
+
+  orders:
+    default_delay_ms: 500
+    send_pending_acks: false
+    replace_ack_ordstatus: current
+
+  price_band:
+    enabled: true
+    pct: 10
+    mode: aggressive
+    enforce_on_fallback: false
+    lookup_timeout_ms: 3000
+    on_no_reference: skip
+
+  rules:
+    - name: nasdaq-test-reject
+      match: { symbol: ZVZZT }
+      behavior: reject
+      reject_code: 1
+      text: "Unknown symbol"
+
+    - name: nasdaq-test-hold
+      match: { symbol: ZWZZT }
+      behavior: ack_only
+
+    - name: a-to-d-full
+      match: { first_letter: "A-D" }
+      behavior: full_fill
+
+    - name: e-to-g-partial
+      match: { first_letter: "E-G" }
+      behavior: partial_fill
+      fills: ["40%", "10%"]
+      then: leave
+
+    - name: h-to-j-cancel
+      match: { first_letter: "H-J" }
+      behavior: cancel_after_ack
+
+    - name: k-to-m-reject
+      match: { first_letter: "K-M" }
+      behavior: reject
+      reject_code: 0
+      text: "Rejected by OrderEcho rule"
+
+    - name: odd-lots
+      match: { first_letter: "N-P" }
+      behavior: partial_fill
+      fills: [1, 2, 3, 405]
+      then: fill_rest
+
+    - name: default
+      match: { any: true }
+      behavior: full_fill
+
+sessions:
+  - id: agent42
+    fix_version: FIX.4.2
+    sender_comp_id: ORDERECHO
+    target_comp_id: AGENT
+
+  - id: agent44
+    fix_version: FIX.4.4
+    sender_comp_id: ORDERECHO
+    target_comp_id: AGENT
+
+  - id: strict-broker
+    fix_version: FIX.4.2
+    sender_comp_id: STRICTBRK
+    target_comp_id: AGENT
+    port: 9879
+    price_band: { pct: 2, on_no_reference: reject }
+    rules:
+      - { name: reject-all, match: { any: true }, behavior: reject, reject_code: 0, text: "Strict broker rejects everything" }
+
+storage:
+  seqnum_dir: data/seqnums
+  evidence_dir: data/evidence
+  msgstore_dir: data/msgstore
+
+logging:
+  log_dir: logs
+  fix_delimiter: "|"
+  engine_level: INFO
+  console: true
+
+control_api:
+  enabled: true
+  host: 127.0.0.1
+  port: 8090
+
+pricing:
+  mode: live
+  provider: yfinance
+  cache_seconds: 300
+  timeout_sec: 10
+  warm_symbols: [AAPL, MSFT, SPY]
+  static:
+    AAPL: 227.50
+    default: 100.00

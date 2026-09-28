@@ -1,0 +1,19 @@
+# cancel an unknown order
+SEND 9 37=NONE|11=K1|41=NOSUCH|39=8|434=1|102=1|58=Unknown order NOSUCH
+# working order for the rest of these
+SEND 8 37=O-GOLDEN-1|11=K2|17=E-GOLDEN-1|20=0|150=0|39=0|55=ZWZZT|54=1|38=1000|40=2|44=230.00|32=0|31=0.00|151=1000|14=0|6=0.0000|60=<TRANSACT_TIME>
+# duplicate ClOrdID on the cancel
+SEND 9 37=NONE|11=K2|41=K2|39=8|434=1|102=2|58=Duplicate ClOrdID
+# symbol mismatch
+SEND 9 37=O-GOLDEN-1|11=K3|41=K2|39=0|434=1|102=2|58=Symbol WRONG does not match order symbol ZWZZT
+# side mismatch
+SEND 9 37=O-GOLDEN-1|11=K4|41=K2|39=0|434=1|102=2|58=Side 2 does not match order side 1
+# replace below CumQty
+SEND 9 37=O-GOLDEN-1|11=K5|41=K2|39=0|434=2|102=2|58=OrderQty must be a positive whole number: 0
+# replace changing side
+SEND 9 37=O-GOLDEN-1|11=K6|41=K2|39=0|434=2|102=2|58=Side 2 does not match order side 1
+# replace moving the price out of band
+SEND 9 37=O-GOLDEN-1|11=K7|41=K2|39=0|434=2|102=2|58=Limit 500.00 outside 10% band of ref 227.50 (static:config)
+# cancel a closed order
+SEND 8 37=O-GOLDEN-1|11=K8|41=K2|17=E-GOLDEN-2|20=0|150=4|39=4|55=ZWZZT|54=1|38=1000|40=2|44=230.00|32=0|31=0.00|151=0|14=0|6=0.0000|60=<TRANSACT_TIME>
+SEND 9 37=O-GOLDEN-1|11=K9|41=K8|39=4|434=1|102=0|58=Order is CANCELED

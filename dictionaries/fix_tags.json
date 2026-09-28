@@ -1,0 +1,5568 @@
+[
+  {
+    "tag": 1,
+    "name": "Account",
+    "description": "Account mnemonic as agreed between buy and sell sides, used for clearing and allocation.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Format varies by counterparty and asset class. In equities, this is typically a clearing account number. Absent in many algorithmic order flows where account is inferred from SenderCompID (49).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 6,
+    "name": "AvgPx",
+    "description": "Calculated average price of all fills on this order.",
+    "data_type": "Price",
+    "required_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Weighted average of all fill prices on this order to date. Will be 0 for unfilled orders. Calculated as sum(LastPx \u00d7 LastQty) / CumQty. The currency is specified by Currency (15).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 7,
+    "name": "BeginSeqNo",
+    "description": "Indicates the sequence number of the first message in the range to be resent. Used in Resend Request (2) to request the counterparty retransmit a sequence of messages starting from this number.",
+    "data_type": "SeqNum",
+    "required_in": [
+      {
+        "code": "2",
+        "name": "Resend Request"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Always paired with EndSeqNo (16). A gap in incoming sequence numbers triggers a Resend Request with BeginSeqNo set to the first missing message number.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 8,
+    "name": "BeginString",
+    "description": "Identifies beginning of a new message and the protocol version. Must always be the first field in any FIX message.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "FIX.4.0": "FIX version 4.0",
+      "FIX.4.1": "FIX version 4.1",
+      "FIX.4.2": "FIX version 4.2",
+      "FIX.4.3": "FIX version 4.3",
+      "FIX.4.4": "FIX version 4.4",
+      "FIXT.1.1": "FIX Transport 1.1 (used with FIX 5.0 SP2)"
+    },
+    "fix_version_added": "FIX 4.0",
+    "notes": "Always tag 8, always first. The value determines which version of the protocol governs message field requirements. FIX.4.2 and FIX.4.4 are the most common in production equity trading environments today.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 9,
+    "name": "BodyLength",
+    "description": "Message length in bytes, counted from the byte immediately after BodyLength's SOH delimiter to (but not including) the delimiter before CheckSum (10).",
+    "data_type": "Length",
+    "required_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Always the second field in any FIX message. Used by parsers to validate message framing. A mismatch between BodyLength and the actual byte count will cause a session-level Reject (MsgType=3).",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 10,
+    "name": "CheckSum",
+    "description": "Three-digit, zero-padded modulo-256 checksum of all bytes in the message up to and including the SOH before this field.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Always the last field in any FIX message. The value is always exactly 3 digits (e.g. '007', '128', '255'). Calculated by summing ASCII values of all bytes before this field modulo 256. A bad checksum causes a session-level Reject.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 11,
+    "name": "ClOrdID",
+    "description": "Unique identifier for an order as assigned by the buy-side (client). Must remain constant for the life of an order.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "9",
+        "name": "Order Cancel Reject"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "The buy-side must ensure ClOrdID is unique within a trading session. Sell-sides use it to correlate Execution Reports back to the originating order. Cancel and replace requests must include the ClOrdID of the current live order.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 12,
+    "name": "Commission",
+    "description": "Commission amount for the order or fill.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used with CommType (13) to fully specify the fee. For CommType=2 (percentage), express as decimal, e.g. 0.0020 for 20 bps.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 13,
+    "name": "CommType",
+    "description": "Indicates the type of commission structure for the order.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "1": "Per unit (e.g. per share)",
+      "2": "Percentage of trade value",
+      "3": "Absolute (total monetary amount)",
+      "4": "Percentage waived \u2014 cash discount",
+      "5": "Percentage waived \u2014 enhanced",
+      "6": "Points per bond or contract"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used alongside Tag 12 (Commission) to fully describe the fee structure. When CommType=2 (percentage), the Commission value should be expressed as a decimal (e.g. 0.002 for 20 bps).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 14,
+    "name": "CumQty",
+    "description": "Total quantity (shares/contracts) filled on this order since it was submitted.",
+    "data_type": "Qty",
+    "required_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Running cumulative fill total. Starts at 0 on the first Execution Report (ExecType=New) and increases with each fill. For a fully filled order: CumQty = OrderQty (38). Related: LeavesQty (151) = OrderQty \u2212 CumQty.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 15,
+    "name": "Currency",
+    "description": "Currency used for price. Uses ISO 4217 three-character currency codes.",
+    "data_type": "Currency",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {
+      "USD": "US Dollar",
+      "EUR": "Euro",
+      "GBP": "British Pound Sterling",
+      "JPY": "Japanese Yen",
+      "CAD": "Canadian Dollar",
+      "AUD": "Australian Dollar",
+      "CHF": "Swiss Franc",
+      "HKD": "Hong Kong Dollar"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "If omitted, the default currency for the security's primary exchange is assumed. Important for cross-currency trading and FX orders where the denomination may differ from the instrument's native currency.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 16,
+    "name": "EndSeqNo",
+    "description": "Indicates the sequence number of the last message in the range to be resent. A value of 0 (zero) means \"resend to infinity\" \u2014 all messages from BeginSeqNo to the current sequence number.",
+    "data_type": "SeqNum",
+    "required_in": [
+      {
+        "code": "2",
+        "name": "Resend Request"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Always paired with BeginSeqNo (7). Setting EndSeqNo=0 requests all messages from the gap to the current point, which is the most common usage.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 17,
+    "name": "ExecID",
+    "description": "Unique identifier of each Execution Report message as assigned by the sell-side.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "Q",
+        "name": "Don't Know Trade"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Every Execution Report must have a unique ExecID. Used as the primary key for referencing a specific execution in allocation, confirmation, and booking messages. ExecID values must never be reused within a session.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 18,
+    "name": "ExecInst",
+    "description": "Free-format instructions for order handling. May contain multiple values separated by spaces.",
+    "data_type": "MultipleCharValue",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "1": "Not held \u2014 trader has discretion on timing",
+      "2": "Work \u2014 work the order with discretion",
+      "3": "Go along \u2014 participate alongside market flow",
+      "4": "Over the day",
+      "5": "Held \u2014 execute immediately, no discretion",
+      "6": "Participate, don't initiate",
+      "7": "Strict scale",
+      "8": "Try to scale",
+      "9": "Stay on bid side",
+      "0": "Stay on offer side",
+      "A": "No cross \u2014 suppress cross trades",
+      "B": "OK to cross",
+      "C": "Call first",
+      "D": "Percent of volume",
+      "E": "Do not increase (DNI)",
+      "F": "Do not reduce (DNR)",
+      "G": "All or none (AON)",
+      "I": "Reinstate on system failure",
+      "J": "Institutions only",
+      "K": "Reinstate on trading halt",
+      "L": "Cancel on trading halt",
+      "M": "Last peg",
+      "N": "Mid-price peg",
+      "O": "Non-negotiable",
+      "P": "Opening peg",
+      "Q": "Market peg",
+      "R": "Cancel on system failure",
+      "S": "Primary peg",
+      "T": "Suspend",
+      "X": "Peg to VWAP"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Multiple values can appear in a single field separated by spaces (e.g. '1 A' means Not Held and No Cross). These are execution strategy hints passed from buy-side to sell-side and onward to the venue.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 20,
+    "name": "ExecTransType",
+    "description": "Identifies the type of execution transaction. Deprecated in FIX 4.2 in favour of ExecType (150).",
+    "data_type": "Char",
+    "required_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "New",
+      "1": "Cancel",
+      "2": "Correct",
+      "3": "Status"
+    },
+    "fix_version_added": "FIX 4.0",
+    "notes": "Required in FIX 4.0 and 4.1 Execution Reports. In FIX 4.2+, replaced by ExecType (150). Still seen in legacy 4.2 implementations.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2"
+    ],
+    "deprecated_in": "4.2"
+  },
+  {
+    "tag": 21,
+    "name": "HandlInst",
+    "description": "Instructions for order handling on the broker trading floor. Indicates whether the order is automated or requires manual intervention.",
+    "data_type": "Char",
+    "required_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "1": "Automated execution, private (no broker intervention)",
+      "2": "Automated execution, public (broker intervention OK)",
+      "3": "Manual order, best execution"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Value 1 is used for the vast majority of algorithmic and DMA orders. Value 3 indicates the order requires a human trader on the sell-side. Affects how the broker is required to handle and prioritize the order.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 22,
+    "name": "SecurityIDSource",
+    "description": "Identifies the class or source of the SecurityID (48) value. Tells the receiver how to interpret the security identifier.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "1": "CUSIP",
+      "2": "SEDOL",
+      "3": "QUIK",
+      "4": "ISIN number",
+      "5": "RIC code",
+      "6": "ISO Currency Code",
+      "7": "ISO Country Code",
+      "8": "Exchange Symbol",
+      "9": "CTA Symbol (Consolidated Tape Association)",
+      "A": "Bloomberg Symbol",
+      "B": "Wertpapier",
+      "C": "Dutch",
+      "D": "Valoren",
+      "E": "Sicovam",
+      "F": "Belgian",
+      "G": "Common (Clearstream and Euroclear)"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Named IDSource in FIX 4.1 and earlier; renamed SecurityIDSource in FIX 4.2. Must always accompany SecurityID (48). The most common values in US equity trading are 1 (CUSIP) and 8 (Exchange Symbol).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 29,
+    "name": "LastCapacity",
+    "description": "Indicates the capacity in which the broker executed the most recent fill.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "1": "Agent",
+      "2": "Cross as agent",
+      "3": "Cross as principal",
+      "4": "Principal"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Has regulatory significance in most jurisdictions. Whether the broker was acting as agent (on behalf of the client) or principal (trading its own book) affects disclosure requirements, best execution obligations, and commission treatment.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 30,
+    "name": "LastMkt",
+    "description": "Market (exchange or venue) where the most recent fill was executed.",
+    "data_type": "Exchange",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "XNAS": "NASDAQ",
+      "XNYS": "New York Stock Exchange",
+      "BATS": "CBOE BZX (formerly BATS)",
+      "EDGX": "CBOE EDGX Exchange",
+      "XISE": "International Securities Exchange",
+      "XCBO": "Chicago Board Options Exchange",
+      "XCHI": "Chicago Stock Exchange",
+      "ARCX": "NYSE Arca"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Uses ISO 10383 MIC (Market Identifier Code) for the execution venue. Important for Reg NMS trade-through compliance analysis and best execution reporting. Each fill in a partial fill scenario may have a different LastMkt.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 31,
+    "name": "LastPx",
+    "description": "Price at which the most recent fill occurred.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "Q",
+        "name": "Don't Know Trade"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Populated in Execution Reports where ExecType=F (Trade). Used with LastQty (32) to describe each individual fill. The running average across all fills is AvgPx (6). For the first fill, LastPx is also equal to AvgPx.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 32,
+    "name": "LastQty",
+    "description": "Quantity bought or sold on the most recent fill.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "Q",
+        "name": "Don't Know Trade"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Called LastShares in FIX 4.1 and earlier; renamed LastQty in FIX 4.2. Always paired with LastPx (31). The contribution to CumQty is: new CumQty = old CumQty + LastQty.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 34,
+    "name": "MsgSeqNum",
+    "description": "Integer message sequence number. Strictly sequential, starting from 1 at session initiation.",
+    "data_type": "SeqNum",
+    "required_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Both sides maintain independent, monotonically increasing sequence number series. Gaps cause ResendRequests (MsgType=2). Sequence numbers reset to 1 on Logon when ResetSeqNumFlag (141)=Y. Out-of-order delivery causes a session-level Reject.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 35,
+    "name": "MsgType",
+    "description": "Defines message type. Must be the third field in every FIX message, immediately following BeginString (8) and BodyLength (9).",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "Heartbeat",
+      "1": "Test Request",
+      "2": "Resend Request",
+      "3": "Reject",
+      "4": "Sequence Reset",
+      "5": "Logout",
+      "6": "Indication of Interest",
+      "7": "Advertisement",
+      "8": "Execution Report",
+      "9": "Order Cancel Reject",
+      "A": "Logon",
+      "B": "News",
+      "C": "Email",
+      "D": "New Order \u2014 Single",
+      "E": "New Order \u2014 List",
+      "F": "Order Cancel Request",
+      "G": "Order Cancel/Replace Request",
+      "H": "Order Status Request",
+      "J": "Allocation Instruction",
+      "K": "List Cancel Request",
+      "L": "List Execute",
+      "M": "List Status Request",
+      "N": "List Status",
+      "P": "Allocation Instruction Ack",
+      "Q": "Don't Know Trade",
+      "R": "Quote Request",
+      "S": "Quote",
+      "T": "Settlement Instructions",
+      "V": "Market Data Request",
+      "W": "Market Data \u2014 Snapshot/Full Refresh",
+      "X": "Market Data \u2014 Incremental Refresh",
+      "Y": "Market Data Request Reject",
+      "Z": "Quote Cancel",
+      "a": "Quote Status Report",
+      "b": "Quote Acknowledgement",
+      "c": "Security Definition Request",
+      "d": "Security Definition",
+      "e": "Security Status Request",
+      "f": "Security Status",
+      "g": "Trading Session Status Request",
+      "h": "Trading Session Status",
+      "i": "Mass Quote",
+      "j": "Business Message Reject",
+      "k": "Bid Request",
+      "l": "Bid Response",
+      "m": "List Strike Price",
+      "n": "XML Message",
+      "o": "Registration Instructions",
+      "p": "Registration Instructions Response",
+      "q": "Order Mass Cancel Request",
+      "r": "Order Mass Cancel Report",
+      "s": "New Order \u2014 Cross",
+      "t": "Cross Order Cancel/Replace Request",
+      "u": "Cross Order Cancel Request",
+      "v": "Security Type Request",
+      "w": "Security Types",
+      "x": "Security List Request",
+      "y": "Security List",
+      "z": "Derivative Security List Request",
+      "AA": "Derivative Security List",
+      "AB": "New Order \u2014 Multileg",
+      "AC": "Multileg Order Cancel/Replace",
+      "AD": "Trade Capture Report Request",
+      "AE": "Trade Capture Report",
+      "AF": "Order Mass Status Request",
+      "AP": "Position Report",
+      "AS": "Allocation Report",
+      "AV": "Settlement Instruction Request",
+      "AW": "Assignment Report",
+      "AX": "Collateral Request",
+      "AY": "Collateral Assignment",
+      "AZ": "Collateral Response",
+      "BA": "Collateral Report",
+      "BF": "User Response"
+    },
+    "fix_version_added": "FIX 4.0",
+    "notes": "Lowercase letters were introduced in FIX 4.3; two-letter types in FIX 4.4. The most common types in equity trading are D (New Order Single), 8 (Execution Report), F (Cancel), G (Cancel/Replace), 9 (Cancel Reject), and the session messages 0, A, 5.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 36,
+    "name": "NewSeqNo",
+    "description": "New sequence number to reset the outgoing message sequence to. In a Gap Fill Sequence Reset (GapFillFlag=Y), indicates the new expected sequence number after skipping the gap. In a Reset (GapFillFlag=N or absent), forces both sides to reset.",
+    "data_type": "SeqNum",
+    "required_in": [
+      {
+        "code": "4",
+        "name": "Sequence Reset"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Used in SequenceReset (MsgType=4) to jump the sequence forward, skipping messages that do not need to be retransmitted (e.g. Heartbeats). The receiver must update its expected inbound sequence number to NewSeqNo. Never used to decrease the sequence number.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 37,
+    "name": "OrderID",
+    "description": "Unique identifier for an order as assigned by the sell-side (broker or exchange).",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "9",
+        "name": "Order Cancel Reject"
+      },
+      {
+        "code": "Q",
+        "name": "Don't Know Trade"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "H",
+        "name": "Order Status Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Assigned by the sell-side upon receipt of a New Order Single. Echoed back in all Execution Reports for that order. Buy-side systems must store OrderID to reference the order in cancel and status requests. May be an exchange-assigned order reference number.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 38,
+    "name": "OrderQty",
+    "description": "Total number of shares or contracts requested in the order.",
+    "data_type": "Qty",
+    "required_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      },
+      {
+        "code": "Q",
+        "name": "Don't Know Trade"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "For equity orders, expressed in whole shares. For futures and options, expressed in number of contracts. The order is complete when CumQty (14) = OrderQty. In a Cancel/Replace, providing a new OrderQty modifies the order size.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 39,
+    "name": "OrdStatus",
+    "description": "Identifies the current status of an order as of the time this Execution Report was generated.",
+    "data_type": "Char",
+    "required_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "9",
+        "name": "Order Cancel Reject"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "New",
+      "1": "Partially Filled",
+      "2": "Filled",
+      "3": "Done For Day",
+      "4": "Canceled",
+      "5": "Replaced",
+      "6": "Pending Cancel",
+      "7": "Stopped",
+      "8": "Rejected",
+      "9": "Suspended",
+      "A": "Pending New",
+      "B": "Calculated",
+      "C": "Expired",
+      "D": "Accepted For Bidding",
+      "E": "Pending Replace"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Represents the cumulative state of the order, not just the current transaction. OrdStatus must be read alongside ExecType (150): ExecType describes what just happened (e.g. a fill), while OrdStatus describes the order's overall state (e.g. Partially Filled).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 40,
+    "name": "OrdType",
+    "description": "Order type. Determines how the order is priced and matched at the venue.",
+    "data_type": "Char",
+    "required_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "1": "Market",
+      "2": "Limit",
+      "3": "Stop",
+      "4": "Stop Limit",
+      "5": "Market On Close (deprecated)",
+      "6": "With Or Without",
+      "7": "Limit Or Better",
+      "8": "Limit With Or Without",
+      "9": "On Basis",
+      "D": "Previously Quoted",
+      "E": "Previously Indicated",
+      "I": "Funari",
+      "J": "Market If Touched (MIT)",
+      "K": "Market With Leftover As Limit",
+      "L": "Previous Fund Valuation Point",
+      "M": "Next Fund Valuation Point",
+      "P": "Pegged"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Market (1) and Limit (2) are by far the most common. For Limit orders, Price (44) is required. For Stop orders, StopPx (99) is required. For Stop Limit orders, both Price (44) and StopPx (99) are required.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 41,
+    "name": "OrigClOrdID",
+    "description": "The ClOrdID (11) of the most recent prior order in the order chain. Required in cancel and cancel/replace requests.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      },
+      {
+        "code": "9",
+        "name": "Order Cancel Reject"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Must match the ClOrdID of the most recent active order version. The pair (OrigClOrdID, ClOrdID) creates an audit chain: OrigClOrdID points to the order being cancelled, ClOrdID is the new identifier for this cancel request. In an Order Cancel Reject (9), OrigClOrdID echoes back the value from the failed cancel request.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 43,
+    "name": "PossDupFlag",
+    "description": "Indicates possible retransmission of a message with the same sequence number.",
+    "data_type": "Boolean",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "Any message being resent"
+      }
+    ],
+    "valid_values": {
+      "Y": "Possible duplicate \u2014 message may have been previously received",
+      "N": "Original transmission (default)"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Set to Y when resending a message during a ResendRequest (MsgType=2) recovery sequence. The receiving application must check whether it has already processed a message with the same MsgSeqNum (34) and take appropriate action to avoid duplicate order submission.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 44,
+    "name": "Price",
+    "description": "Limit price per unit of quantity. Required for Limit and Stop Limit orders.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Required when OrdType (40) = 2 (Limit) or 4 (Stop Limit). Not applicable to Market orders (OrdType=1). The currency is specified by Currency (15). For bonds, price may be expressed as a percentage of par value rather than an absolute dollar amount.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 45,
+    "name": "RefSeqNum",
+    "description": "Reference message sequence number (MsgSeqNum Tag 34) of the message being rejected or referenced. In Reject (3) messages, points to the specific message that caused the rejection.",
+    "data_type": "SeqNum",
+    "required_in": [
+      {
+        "code": "2",
+        "name": "Resend Request"
+      },
+      {
+        "code": "3",
+        "name": "Reject"
+      },
+      {
+        "code": "j",
+        "name": "Business Message Reject"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "In a ResendRequest (MsgType=2), identifies the start of the sequence range being requested. In a Reject (MsgType=3), identifies the MsgSeqNum of the message that was rejected. Always corresponds to a MsgSeqNum (34) value from the counterparty's outbound message stream.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 47,
+    "name": "Rule80A",
+    "description": "Indicates algorithm for order handling and execution under NYSE/AMEX Rule 80A. Deprecated in FIX 4.3.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {
+      "A": "Agency single order",
+      "B": "Short exempt trans (defined in Rule 80A)",
+      "C": "Prog order non-index arb for member firm",
+      "D": "Prog order index arb for member firm",
+      "E": "Short exempt trans for principal",
+      "F": "Short exempt trans not for member",
+      "H": "Short exempt trans principal (subset of E)",
+      "I": "Individual investor",
+      "J": "Prog order index arb for individual",
+      "K": "Agency prog order non-index arb",
+      "M": "Prog order index arb for other org",
+      "N": "Agency order",
+      "O": "Prog order non-index arb for org",
+      "P": "Principal",
+      "R": "Trans exempt for non-member",
+      "S": "Specialist trades",
+      "T": "Trans from principal",
+      "U": "Prog order index arb for other member",
+      "W": "All other orders for member and org"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Regulatory field for NYSE/AMEX equity trading. Deprecated in FIX 4.3; replaced by more granular fields.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 48,
+    "name": "SecurityID",
+    "description": "Security identifier value. The format is determined by SecurityIDSource (22).",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Must always be accompanied by SecurityIDSource (22) to indicate the identifier type (e.g. CUSIP, ISIN, SEDOL). Commonly used alongside Symbol (55) where the symbol provides human-readable context and SecurityID provides the machine-authoritative identifier.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 49,
+    "name": "SenderCompID",
+    "description": "Assigned value used to identify the firm sending the message.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Agreed upon during session setup between counterparties. Together with TargetCompID (56), SenderCompID forms the session identifier. The receiver must validate that SenderCompID in received messages matches the expected counterparty. Must swap to TargetCompID in replies.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 50,
+    "name": "SenderSubID",
+    "description": "Assigned value used to identify specific message originator's sub-department within the firm. Used in conjunction with SenderCompID (49) to route messages within a firm or to a specific desk or trader. Essential in give-up workflows where messages originate from specific sub-entities.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Part of the standard optional FIX session header. Critical for give-up trades, prime-brokerage, and on-behalf-of workflows where messages are routed through or on behalf of intermediaries.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 52,
+    "name": "SendingTime",
+    "description": "Time of message transmission. Always expressed in UTC.",
+    "data_type": "UTCTimestamp",
+    "required_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Format: YYYYMMDD-HH:MM:SS[.sss] where milliseconds are optional but recommended. Must be in UTC regardless of the trading venue's local timezone. FIX engines validate that SendingTime is within a tolerance window (typically \u00b1120 seconds) of the receiver's clock. The delta between SendingTime and TransactTime (60) measures processing latency.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 54,
+    "name": "Side",
+    "description": "Side of the order \u2014 buy or sell. Required in all order-related messages.",
+    "data_type": "Char",
+    "required_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "1": "Buy",
+      "2": "Sell",
+      "3": "Buy Minus",
+      "4": "Sell Plus",
+      "5": "Sell Short",
+      "6": "Sell Short Exempt",
+      "7": "Undisclosed",
+      "8": "Cross",
+      "9": "Cross Short",
+      "A": "Cross Short Exempt",
+      "B": "As Defined",
+      "C": "Opposite"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Values 5 (Sell Short) and 6 (Sell Short Exempt) carry regulatory significance under Reg SHO. Sell Short requires the broker to have located borrows. Sell Short Exempt is used for market-making activity exempt from locate requirements. Value 1 (Buy) and 2 (Sell) account for the vast majority of order flow.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 55,
+    "name": "Symbol",
+    "description": "Ticker symbol \u2014 the common, human-understood representation of the security.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      },
+      {
+        "code": "Q",
+        "name": "Don't Know Trade"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The exchange ticker symbol (e.g. AAPL, MSFT, SPY). Value '[N/A]' may be used if the security is identified exclusively via SecurityID (48). For multi-leg instruments, Symbol may identify the strategy while individual legs are in repeating groups.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 56,
+    "name": "TargetCompID",
+    "description": "Assigned value used to identify the firm receiving the message.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "The counterpart to SenderCompID (49). Agreed during session setup. The receiver validates that its own identity matches the incoming TargetCompID; a mismatch causes a session-level Reject (MsgType=3) with SessionRejectReason=9 (CompID Problem).",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 57,
+    "name": "TargetSubID",
+    "description": "Assigned value used to identify specific individual or unit intended to receive the message within the target firm. Used with TargetCompID (56) for intra-firm message routing. Required by many venues to route to a specific trading desk.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Part of the standard optional FIX session header. Critical for give-up trades, prime-brokerage, and on-behalf-of workflows where messages are routed through or on behalf of intermediaries.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 58,
+    "name": "Text",
+    "description": "Free format text string. Used for human-readable context, error descriptions, or supplemental order instructions.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      },
+      {
+        "code": "3",
+        "name": "Reject"
+      },
+      {
+        "code": "5",
+        "name": "Logout"
+      },
+      {
+        "code": "j",
+        "name": "Business Message Reject"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      },
+      {
+        "code": "P",
+        "name": "Allocation Instruction Ack"
+      },
+      {
+        "code": "Q",
+        "name": "Don't Know Trade"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Commonly used in Rejects (MsgType=3, 9) to explain the rejection reason in plain language alongside the structured reason code. Not machine-parseable; counterparties should not rely on the content of Text for automated processing. See EncodedText (355) for non-ASCII characters.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 59,
+    "name": "TimeInForce",
+    "description": "Specifies how long the order remains in effect. Governs when the order expires if not fully filled.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "0": "Day \u2014 expires at end of trading day (default)",
+      "1": "Good Till Cancel (GTC) \u2014 rests until explicitly cancelled",
+      "2": "At the Opening (OPG) \u2014 must execute at the opening or cancel",
+      "3": "Immediate or Cancel (IOC) \u2014 execute available quantity, cancel remainder",
+      "4": "Fill or Kill (FOK) \u2014 execute entire quantity immediately or cancel all",
+      "5": "Good Till Crossing (GTX)",
+      "6": "Good Till Date (GTD) \u2014 requires ExpireDate (432) or ExpireTime (126)",
+      "7": "At the Close \u2014 executes at closing price or cancels",
+      "8": "Good Through Crossing",
+      "9": "At Crossing"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "If omitted, Day (0) is assumed by most execution venues. GTD (6) requires an ExpireDate (432) or ExpireTime (126) to specify the expiry. FOK (4) and IOC (3) are common for algorithmic strategies that cannot accept partial fills or resting orders.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 60,
+    "name": "TransactTime",
+    "description": "Time the transaction represented by this message occurred \u2014 when the order was submitted, the fill happened, or the cancellation was processed. Always expressed in UTC.",
+    "data_type": "UTCTimestamp",
+    "required_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Distinct from SendingTime (52): TransactTime is when the business event occurred; SendingTime is when the FIX message was sent. The difference between these two timestamps is the processing latency introduced by the send-side system. Both must be in UTC and formatted as YYYYMMDD-HH:MM:SS[.sss].",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 62,
+    "name": "ValidUntilTime",
+    "description": "Time until which an IOI or quote remains valid.",
+    "data_type": "UTCTimestamp",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "S",
+        "name": "Quote"
+      },
+      {
+        "code": "6",
+        "name": "Indication of Interest"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "After this time the quote or IOI should be considered expired by the recipient.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 63,
+    "name": "SettlType",
+    "description": "Indicates the settlement period for the order.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "0": "Regular / FX Spot settlement",
+      "1": "Cash (same day)",
+      "2": "Next Day (T+1)",
+      "3": "T+2",
+      "4": "T+3",
+      "5": "T+4",
+      "6": "Future",
+      "7": "When And If Issued",
+      "8": "Seller's Option",
+      "9": "T+5",
+      "B": "Broken date \u2014 FX",
+      "C": "FX Spot Next settlement"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Named SettlmntTyp in FIX 4.1 and earlier; renamed SettlType in FIX 4.2. Default settlement depends on security type and market. US equities shifted to T+2 in 2017 and T+1 in 2024. Cash settlement (1) is used for same-day obligations.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 65,
+    "name": "SymbolSfx",
+    "description": "Additional information about the security symbol to differentiate it, e.g. 'WI' for When Issued.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "WI": "When Issued",
+      "CD": "CEDEL",
+      "CP": "Coupon (e.g. municipal bond coupon only)",
+      "CV": "Convertible",
+      "I": "INSTINET",
+      "L": "Letter/limited (e.g. 144A)",
+      "M": "Matured",
+      "PO": "Put option",
+      "W": "When distributed",
+      "XD": "Ex dividend",
+      "XR": "Ex rights"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used in conjunction with Symbol (55) when additional qualifier is needed to uniquely identify a security.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 66,
+    "name": "ListID",
+    "description": "Unique identifier for a list of orders submitted together as a basket or program trade.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "E",
+        "name": "New Order List"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "K",
+        "name": "List Cancel Request"
+      },
+      {
+        "code": "N",
+        "name": "List Status"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The buy-side assigns ListID when submitting a New Order List (MsgType=E). All orders in the list share the same ListID.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 67,
+    "name": "ListSeqNo",
+    "description": "Sequence number of an order within its list, starting from 1.",
+    "data_type": "Int",
+    "required_in": [
+      {
+        "code": "E",
+        "name": "New Order List"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used to identify the position of each individual order within a list basket. ListSeqNo=1 to TotNoOrders (68).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 68,
+    "name": "TotNoOrders",
+    "description": "Total number of orders contained in the list.",
+    "data_type": "Int",
+    "required_in": [
+      {
+        "code": "E",
+        "name": "New Order List"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Required in New Order List. The receiving system expects ListSeqNo values from 1 to TotNoOrders.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 70,
+    "name": "AllocID",
+    "description": "Unique identifier for an Allocation message. Assigned by the institution sending the Allocation Instruction; referenced as AllocID by the responding Allocation Instruction Ack. Must be unique across all allocation messages.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      },
+      {
+        "code": "P",
+        "name": "Allocation Instruction Ack"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "P",
+        "name": "Allocation Instruction Ack"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Primary key for matching allocation messages to their acknowledgements. Referenced in Allocation Instruction Ack (P) to confirm or reject.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 71,
+    "name": "AllocTransType",
+    "description": "Indicates the type of allocation transaction being submitted.",
+    "data_type": "Char",
+    "required_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "New \u2014 original allocation",
+      "1": "Replace \u2014 replaces a previously sent allocation (RefAllocID required)",
+      "2": "Cancel \u2014 cancels a previously sent allocation (RefAllocID required)"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "When using Replace (1) or Cancel (2), Tag 72 (RefAllocID) must contain the AllocID of the message being replaced or cancelled.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 72,
+    "name": "RefAllocID",
+    "description": "Required when AllocTransType (71) is Replace (1) or Cancel (2). Contains the AllocID of the original Allocation Instruction being replaced or cancelled.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      },
+      {
+        "code": "P",
+        "name": "Allocation Instruction Ack"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Required when AllocTransType (71) = 1 (Replace) or 2 (Cancel). Points to the AllocID (70) being modified.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 73,
+    "name": "NoOrders",
+    "description": "Number of orders being allocated in the repeating orders group within an Allocation Instruction.",
+    "data_type": "NumInGroup",
+    "required_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Header count for the repeating group of orders in an allocation. Each order includes ClOrdID (11), OrderID (37), etc.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 74,
+    "name": "AvgPrxPrecision",
+    "description": "Number of decimal places to which average price should be rounded.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Allows the institution to specify the precision of AvgPx (6) rounding for average price calculation across multiple fills.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 75,
+    "name": "TradeDate",
+    "description": "Date of the trade in YYYYMMDD format. Represents the local market date, not the settlement date.",
+    "data_type": "LocalMktDate",
+    "required_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The trade date in the local market timezone \u2014 the date when the exchange's trading session considered the trade to have occurred. May differ from the UTC date in SendingTime (52) for after-midnight sessions or when crossing midnight UTC. Not to be confused with settlement date.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 76,
+    "name": "ExecBroker",
+    "description": "Identifier of the executing broker, typically a FINRA MPID or similar regulatory identifier.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Deprecated in FIX 4.3 in favour of the Parties repeating group (NoPartyIDs / PartyID / PartyIDSource / PartyRole). Still widely seen in legacy FIX 4.2 implementations. Used for trade reporting to identify the executing broker's market participant ID.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 77,
+    "name": "PositionEffect",
+    "description": "Indicates whether the resulting position after a trade should be treated as an opening or closing position.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "O": "Open \u2014 establishing or adding to a position",
+      "C": "Close \u2014 reducing or closing an existing position",
+      "R": "Rolled \u2014 rolling a futures contract",
+      "F": "FIFO \u2014 use first-in, first-out position accounting"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Critical for derivatives, futures, and options trading where position accounting affects margin requirements and regulatory reporting. In options trading, this determines whether the order opens a new position or closes an existing one, which can affect exercise rights and expiration handling.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 78,
+    "name": "NoAllocs",
+    "description": "Number of allocation sub-accounts (repeating group). Each sub-account entry specifies the account, shares, and settlement instructions for one portion of the trade.",
+    "data_type": "NumInGroup",
+    "required_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Header count for the repeating group of individual sub-account allocations. Each sub-account has AllocAccount (79) and AllocShares (80).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 79,
+    "name": "AllocAccount",
+    "description": "Identifies the sub-account within the allocation repeating group (Tag 78 NoAllocs). The format is counterparty-specific \u2014 typically a mnemonic representing a clearing account or fund.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      },
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Each entry in the NoAllocs (78) repeating group specifies one allocation account. Format is agreed upon between parties.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 80,
+    "name": "AllocShares",
+    "description": "Number of shares/contracts to allocate to the sub-account identified by AllocAccount (79) within the allocation repeating group.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Must be specified per allocation sub-account. The sum of all AllocShares across the repeating group should equal the total trade quantity.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 81,
+    "name": "ProcessCode",
+    "description": "Order processing code for the allocation, specifying commission and clearing arrangements.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {
+      "0": "Regular",
+      "1": "Soft dollar",
+      "2": "Step-in",
+      "3": "Step-out",
+      "4": "Soft dollar step-in",
+      "5": "Soft dollar step-out",
+      "6": "Plan sponsor"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used by clearing systems to route and process the allocation correctly based on the business arrangement.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 83,
+    "name": "AllocLinkID",
+    "description": "Can be used to link two separate AllocationInstruction / ConfirmationRequest messages together. Both sides of a give-up trade set the same AllocLinkID to cross-reference the two allocations.",
+    "data_type": "String",
+    "fix_version_added": "FIX 4.2",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "notes": "",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 84,
+    "name": "CxlQty",
+    "description": "Total quantity cancelled on the order.",
+    "data_type": "Qty",
+    "required_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Reflects the total cancelled quantity across all related orders in an allocation. Helps reconcile OrderQty vs. CumQty + CxlQty.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 87,
+    "name": "AllocStatus",
+    "description": "Status of the allocation as reported by the sell-side in an Allocation Instruction Ack.",
+    "data_type": "Int",
+    "required_in": [
+      {
+        "code": "P",
+        "name": "Allocation Instruction Ack"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "Accepted",
+      "1": "Block Level Reject",
+      "2": "Account Level Reject",
+      "3": "Received \u2014 not yet processed",
+      "4": "Incomplete",
+      "5": "Rejected By Intermediary",
+      "6": "Allocation Pending",
+      "7": "Reversed"
+    },
+    "fix_version_added": "FIX 4.0",
+    "notes": "In a Pending (3) status, a second Ack will follow when processing is complete.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 88,
+    "name": "AllocRejCode",
+    "description": "Reason for rejection of an allocation.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "P",
+        "name": "Allocation Instruction Ack"
+      }
+    ],
+    "valid_values": {
+      "0": "Unknown Account(s)",
+      "1": "Incorrect Quantity",
+      "2": "Incorrect Average Price",
+      "3": "Unknown Executing Broker Mnemonic",
+      "4": "Commission Difference",
+      "5": "Unknown OrderID",
+      "6": "Unknown ListID",
+      "7": "Other",
+      "8": "Incorrect Allocated Quantity",
+      "9": "Calculation Difference",
+      "10": "Unknown or Stale ExecID",
+      "11": "Mismatched Data",
+      "12": "Unknown ClOrdID",
+      "13": "Warehouse Request Rejected"
+    },
+    "fix_version_added": "FIX 4.0",
+    "notes": "Populated when AllocStatus (87) is 1 (Block reject) or 2 (Account level reject).",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 97,
+    "name": "PossResend",
+    "description": "Indicates a message may be a retransmission of a previously sent application message.",
+    "data_type": "Boolean",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {
+      "Y": "Possible resend \u2014 check for duplicate application message",
+      "N": "Original transmission (default)"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Unlike PossDupFlag (43), PossResend applies to application messages rather than session-level retransmissions.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 98,
+    "name": "EncryptMethod",
+    "description": "Method of encryption used for the session. In modern FIX implementations almost always 0 (None).",
+    "data_type": "Int",
+    "required_in": [
+      {
+        "code": "A",
+        "name": "Logon"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "None (required for most public implementations)",
+      "1": "PKCS (Proprietary)",
+      "2": "DES (ECB mode)",
+      "3": "PKCS/DES (combination)",
+      "4": "PGP/DES-MD5",
+      "5": "PGP/DES",
+      "6": "PEM/DES-MD5"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Both sides must agree on EncryptMethod during Logon. Value 0 is required by most FIX networks and certification environments.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 99,
+    "name": "StopPx",
+    "description": "The stop trigger price for a Stop or Stop Limit order.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "For Stop orders (OrdType=3), StopPx triggers conversion to a Market order. For Stop Limit (OrdType=4), triggers conversion to a Limit order at Price (44).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 100,
+    "name": "ExDestination",
+    "description": "Execution destination \u2014 the specific exchange, ECN, or venue to which the order should be routed.",
+    "data_type": "Exchange",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "XNAS": "NASDAQ",
+      "XNYS": "New York Stock Exchange",
+      "BATS": "CBOE BZX Exchange",
+      "EDGX": "CBOE EDGX Exchange",
+      "EDGA": "CBOE EDGA Exchange",
+      "XCBO": "Chicago Board Options Exchange",
+      "ARCX": "NYSE Arca",
+      "IEXG": "IEX (Investors Exchange)",
+      "MEMX": "MEMX Exchange",
+      "D": "FINRA ADF / OTC"
+    },
+    "fix_version_added": "FIX 4.0",
+    "notes": "Uses ISO 10383 MIC (Market Identifier Code). Used in smart order routing (SOR) to direct orders to specific venues. In Execution Reports, indicates where the fill actually occurred. When absent, the broker routes at its own discretion.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 102,
+    "name": "CxlRejReason",
+    "description": "Coded reason why a cancel or cancel/replace request was rejected.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "9",
+        "name": "Order Cancel Reject"
+      }
+    ],
+    "valid_values": {
+      "0": "Too late to cancel",
+      "1": "Unknown order",
+      "2": "Broker/exchange option",
+      "3": "Order already in Pending Cancel or Pending Replace",
+      "4": "Unable to process Order Mass Cancel Request",
+      "5": "OrigOrdModTime did not match last modification time",
+      "6": "Duplicate ClOrdID received",
+      "99": "Other"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Provides machine-readable reject reason alongside Text (58). Value 1 (Unknown order) is most common when the order no longer exists on the book.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 103,
+    "name": "OrdRejReason",
+    "description": "Structured code identifying the reason an order was rejected.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report (OrdStatus=Rejected)"
+      },
+      {
+        "code": "9",
+        "name": "Order Cancel Reject"
+      }
+    ],
+    "valid_values": {
+      "0": "Broker/Exchange Option",
+      "1": "Unknown Symbol",
+      "2": "Exchange Closed",
+      "3": "Order Exceeds Limit",
+      "4": "Too Late to Enter",
+      "5": "Unknown Order",
+      "6": "Duplicate Order (duplicate ClOrdID)",
+      "7": "Duplicate of a Verbally Communicated Order",
+      "8": "Stale Order",
+      "9": "Trade Along Required",
+      "10": "Invalid Investor ID",
+      "11": "Unsupported Order Characteristic",
+      "12": "Surveillance Option",
+      "13": "Incorrect Quantity",
+      "14": "Incorrect Allocated Quantity",
+      "15": "Unknown Account",
+      "99": "Other"
+    },
+    "fix_version_added": "FIX 4.0",
+    "notes": "Provides a machine-readable rejection reason alongside the human-readable Text (58) field. Automatically populated in Execution Reports where OrdStatus=Rejected (8) and in Order Cancel Rejects (MsgType=9). Systems should handle both the structured code and Text for complete rejection processing.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 107,
+    "name": "SecurityDesc",
+    "description": "Free-form text description of the security.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Not machine-parseable; for display/confirmation purposes. Often contains bond name, option series description, or fund name.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 108,
+    "name": "HeartBtInt",
+    "description": "Heartbeat interval in seconds. Both parties must agree on this value during Logon.",
+    "data_type": "Int",
+    "required_in": [
+      {
+        "code": "A",
+        "name": "Logon"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "A Heartbeat (MsgType=0) is sent if no other message has been sent within HeartBtInt seconds. Typical values: 30 or 60 seconds. A test request is sent after two HeartBtInt periods with no received message.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 109,
+    "name": "ClientID",
+    "description": "Firm identifier used in third-party transaction reporting, typically the end-client's identity.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Deprecated in FIX 4.3 in favour of the Parties repeating group (NoPartyIDs/PartyID/PartyIDSource/PartyRole with PartyRole=3 for ClientID). Widely used in FIX 4.2 implementations to identify the end-client behind the order for regulatory reporting and allocations.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 110,
+    "name": "MinQty",
+    "description": "Minimum quantity of an order that must be executed. If this quantity cannot be filled, the order (or remainder) is cancelled.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Used when the client will not accept fills smaller than a specified threshold. Common in block trading contexts. Different from TimeInForce=FOK (fill-or-kill): FOK requires the entire OrderQty be filled, while MinQty allows partial fills above the minimum threshold.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 111,
+    "name": "MaxFloor",
+    "description": "Maximum quantity of an order to be shown on the exchange book at any one time. Also known as the 'iceberg' or 'reserve' quantity.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "When specified, the exchange displays only MaxFloor shares at a time. After each fill, the displayed quantity replenishes from the reserve until the order is fully filled or cancelled. The total order size is hidden, reducing market impact for large orders. Not supported by all venues.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 112,
+    "name": "TestReqID",
+    "description": "Unique identifier for a Test Request message, echoed back in the responding Heartbeat.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "1",
+        "name": "Test Request"
+      },
+      {
+        "code": "0",
+        "name": "Heartbeat"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "The initiating side sends a Test Request with a unique TestReqID. The responding side sends a Heartbeat echoing the same TestReqID (112) to confirm the session is alive.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 113,
+    "name": "ReportToExch",
+    "description": "Indicates which side is responsible for reporting the trade to the exchange.",
+    "data_type": "Boolean",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {
+      "Y": "Sell-side reports to exchange",
+      "N": "Buy-side reports to exchange"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Relevant in markets where one party is required to report the transaction to the trade reporting facility.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 114,
+    "name": "LocateReqd",
+    "description": "Indicates whether a locate is required before a short sale can be executed.",
+    "data_type": "Boolean",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {
+      "Y": "Locate required (order is a short sale)",
+      "N": "Locate not required"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Applies to short sale orders (Side=5 or 6). Under Reg SHO, a locate must be obtained before short selling most equities.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 115,
+    "name": "OnBehalfOfCompID",
+    "description": "Assigned value used to identify firm originating the message if the message was delivered by a third party. In give-up trading, the executing broker populates this with the give-up broker's CompID so the prime broker knows who executed the trade.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Part of the standard optional FIX session header. Critical for give-up trades, prime-brokerage, and on-behalf-of workflows where messages are routed through or on behalf of intermediaries.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 116,
+    "name": "OnBehalfOfSubID",
+    "description": "Assigned value used to identify the specific message originator within the firm identified by OnBehalfOfCompID (115). Supplements Tag 115 for fine-grained routing in intermediary scenarios.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.0",
+    "notes": "Part of the standard optional FIX session header. Critical for give-up trades, prime-brokerage, and on-behalf-of workflows where messages are routed through or on behalf of intermediaries.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 117,
+    "name": "QuoteID",
+    "description": "Unique identifier for a quote, assigned by the quoting party (sell-side).",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "S",
+        "name": "Quote"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "When a buy-side wants to trade on a quote, they include the QuoteID in their New Order Single so the sell-side can associate the order with the original quote.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 118,
+    "name": "NetMoney",
+    "description": "Total monetary value of the trade \u2014 price multiplied by quantity.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Net of commissions and accrued interest. Currency specified by Currency (15).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 119,
+    "name": "SettlCurrAmt",
+    "description": "Total amount due in settlement currency.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The settlement amount after FX conversion. Used with SettlCurrency (120) and SettlCurrFxRate (155).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 120,
+    "name": "SettlCurrency",
+    "description": "Currency in which settlement will occur.",
+    "data_type": "Currency",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "ISO 4217 three-character code. When different from Currency (15), SettlCurrFxRate (155) gives the conversion rate.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 122,
+    "name": "OrigSendingTime",
+    "description": "Original SendingTime when a message is retransmitted during gap-fill.",
+    "data_type": "UTCTimestamp",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Required when PossDupFlag (43)=Y. Preserves the original timestamp so the receiver can identify the original message in logs.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 123,
+    "name": "GapFillFlag",
+    "description": "Distinguishes a gap-fill Sequence Reset from a hard reset to sequence 1.",
+    "data_type": "Boolean",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "4",
+        "name": "Sequence Reset"
+      }
+    ],
+    "valid_values": {
+      "Y": "Gap fill \u2014 skip messages in the resend range",
+      "N": "Sequence Reset to new value (default)"
+    },
+    "fix_version_added": "FIX 4.0",
+    "notes": "When GapFillFlag=Y, the Sequence Reset message is skipping over messages that don't need retransmission (e.g. Heartbeats). NewSeqNo (36) is the next expected sequence number.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 126,
+    "name": "ExpireTime",
+    "description": "Date and time the order expires if not fully filled.",
+    "data_type": "UTCTimestamp",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used with TimeInForce (59)=6 (Good Till Date/Time). Must be in UTC. See also ExpireDate (432) for date-only precision.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 128,
+    "name": "DeliverToCompID",
+    "description": "Assigned value used to identify the firm targeted to receive the message when delivered via a third-party intermediary. Used in prime-brokerage and give-up workflows to forward confirmations and allocations.",
+    "data_type": "String",
+    "fix_version_added": "FIX 4.0",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "notes": "Part of the standard optional FIX session header. Critical for give-up trades, prime-brokerage, and on-behalf-of workflows where messages are routed through or on behalf of intermediaries.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 129,
+    "name": "DeliverToSubID",
+    "description": "Assigned value used to identify a specific individual or unit within the target firm for message delivery via a third party. Supplements DeliverToCompID (128) for intra-firm routing.",
+    "data_type": "String",
+    "fix_version_added": "FIX 4.0",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "notes": "Part of the standard optional FIX session header. Critical for give-up trades, prime-brokerage, and on-behalf-of workflows where messages are routed through or on behalf of intermediaries.",
+    "fix_versions": [
+      "4.0",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 131,
+    "name": "QuoteReqID",
+    "description": "Unique identifier for a Quote Request, echoed in the Quote response.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "R",
+        "name": "Quote Request"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "S",
+        "name": "Quote"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The QuoteReqID links a Quote (S) response back to the originating Quote Request (R). The quoting party echoes it in the Quote.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 132,
+    "name": "BidPx",
+    "description": "Best bid price offered by the quoting party.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "S",
+        "name": "Quote"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The price at which the quoting party is willing to buy. Used in two-sided quotes alongside BidSize (134) and OfferPx (133).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 133,
+    "name": "OfferPx",
+    "description": "Best offer (ask) price offered by the quoting party.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "S",
+        "name": "Quote"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The price at which the quoting party is willing to sell. Used alongside OfferSize (135) and BidPx (132).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 134,
+    "name": "BidSize",
+    "description": "Quantity available at the bid price.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "S",
+        "name": "Quote"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The maximum quantity the quoting party is willing to buy at BidPx (132).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 135,
+    "name": "OfferSize",
+    "description": "Quantity available at the offer price.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "S",
+        "name": "Quote"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "The maximum quantity the quoting party is willing to sell at OfferPx (133).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 140,
+    "name": "PrevClosePx",
+    "description": "Previous closing price for the security, used as a reference or benchmark.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used for informational purposes or to calculate peg offsets. Not a trading instruction.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 141,
+    "name": "ResetSeqNumFlag",
+    "description": "Signals that both parties should reset their sequence numbers to 1.",
+    "data_type": "Boolean",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "A",
+        "name": "Logon"
+      }
+    ],
+    "valid_values": {
+      "Y": "Reset sequence numbers to 1",
+      "N": "Maintain current sequence (default)"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Included in a Logon (A) to perform a clean session start. Both sides must agree \u2014 if one side sends Y and the other sends N, the session typically fails. Common at business day open.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 142,
+    "name": "SenderLocationID",
+    "description": "Optional geographic location of the sender (e.g. city code or trading desk location).",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Supplements SenderCompID (49). Used by some regulatory regimes to identify the physical location of the order originator.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 143,
+    "name": "TargetLocationID",
+    "description": "Optional geographic location of the target.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Supplements TargetCompID (56). Rarely used in practice but available for routing in multi-location networks.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 150,
+    "name": "ExecType",
+    "description": "Describes what happened in this specific Execution Report \u2014 the type of transaction being reported.",
+    "data_type": "Char",
+    "required_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "New \u2014 order acknowledged",
+      "1": "Partial Fill (deprecated in 4.4, use F)",
+      "2": "Fill (deprecated in 4.4, use F)",
+      "3": "Done For Day",
+      "4": "Canceled",
+      "5": "Replace",
+      "6": "Pending Cancel",
+      "7": "Stopped",
+      "8": "Rejected",
+      "9": "Suspended",
+      "A": "Pending New",
+      "B": "Calculated",
+      "C": "Expired",
+      "D": "Restated \u2014 unsolicited correction by sell-side",
+      "E": "Pending Replace",
+      "F": "Trade \u2014 fill (partial or full)",
+      "G": "Trade Correct",
+      "H": "Trade Cancel",
+      "I": "Order Status (unsolicited status report)"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Added in FIX 4.2 to replace the older ExecTransType (20). ExecType=F (Trade) is the most important: it signals that a fill occurred. Always read ExecType and OrdStatus (39) together \u2014 ExecType tells you what just happened; OrdStatus tells you the cumulative order state. ExecType=D (Restated) is used by venues to push unsolicited corrections.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 151,
+    "name": "LeavesQty",
+    "description": "Quantity of the order remaining open for further execution. LeavesQty = OrderQty \u2212 CumQty.",
+    "data_type": "Qty",
+    "required_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Added in FIX 4.2 alongside ExecType (150). When LeavesQty reaches 0, the order is complete (either fully filled or cancelled). For cancelled and rejected orders, LeavesQty is set to 0 even though CumQty < OrderQty. A non-zero LeavesQty with OrdStatus=Filled indicates a data error.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 152,
+    "name": "CashOrderQty",
+    "description": "Order quantity expressed in cash (monetary) terms rather than number of shares or contracts.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Mutual-fund and retail orders often specify a cash amount rather than a share quantity. The venue converts to shares at the execution price.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 155,
+    "name": "SettlCurrFxRate",
+    "description": "FX conversion rate used to convert from the trade currency (Currency 15) to settlement currency (SettlCurrency 120).",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Applies when SettlCurrency (120) differs from Currency (15). SettlCurrAmt (119) = NetMoney (118) \u00d7 SettlCurrFxRate (155).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 158,
+    "name": "AccruedInterestRate",
+    "description": "Accrued interest rate as a percentage of par value, for fixed-income securities.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used in bond trades. Combined with AccruedInterestAmt (159) to determine the total settlement amount.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 159,
+    "name": "AccruedInterestAmt",
+    "description": "Accrued interest amount in currency for fixed-income securities.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Dirty price = clean price + AccruedInterestAmt. Important for bond settlement and allocation calculations.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 167,
+    "name": "SecurityType",
+    "description": "Indicates the asset class or type of security being traded.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "CS": "Common Stock",
+      "PS": "Preferred Stock",
+      "OPT": "Options",
+      "FUT": "Future",
+      "FXSPOT": "FX Spot",
+      "FXFWD": "FX Forward",
+      "FXSWAP": "FX Swap",
+      "CORP": "Corporate Bond",
+      "UST": "US Treasury Note",
+      "USTB": "US Treasury Bill",
+      "EUSUPRA": "Euro Supranational Coupon",
+      "FAC": "Federal Agency Coupon",
+      "FADN": "Federal Agency Discount Note",
+      "CPP": "Commercial Paper",
+      "MF": "Mutual Fund",
+      "MLEG": "Multi-leg instrument",
+      "ETF": "Exchange Traded Fund",
+      "NONE": "No Security Type",
+      "?": "Wildcard"
+    },
+    "fix_version_added": "FIX 4.1",
+    "notes": "Determines which fields are relevant and which message types are applicable. Different asset classes have materially different required fields \u2014 for example, FX orders typically omit Price (44) and use dedicated FX tags instead. Also important for regulatory routing and reporting decisions.",
+    "fix_versions": [
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 168,
+    "name": "EffectiveTime",
+    "description": "Date and time the order becomes effective (future-dated orders).",
+    "data_type": "UTCTimestamp",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Allows scheduling an order to activate at a future time. Exchange must support time-triggered order entry.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 196,
+    "name": "AllocLinkID",
+    "description": "Identifier linking multiple allocation messages to a single FX trade for netting or swap purposes.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used with AllocLinkType (197) for FX netting or swap structures where multiple allocations relate to one trade.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 197,
+    "name": "AllocLinkType",
+    "description": "Type of link represented by AllocLinkID (196).",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {
+      "0": "FX Netting",
+      "1": "FX Swap"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Indicates how related allocation messages should be processed together \u2014 as netted FX positions or as a swap transaction.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 198,
+    "name": "SecondaryOrderID",
+    "description": "Order identifier assigned by the broker, secondary to OrderID (37) assigned by the exchange.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Allows the broker to carry its own internal order reference separate from the venue's OrderID. Useful for drop-copy and reconciliation.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 200,
+    "name": "MaturityMonthYear",
+    "description": "Month and year of maturity or expiration for derivatives, in YYYYMM format.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Required for futures and options to identify the contract series. Combined with MaturityDay (205) for exact expiry date. Superseded by MaturityDate (541) in FIX 4.4.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 201,
+    "name": "PutOrCall",
+    "description": "Indicates whether an option is a put or a call.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "0": "Put",
+      "1": "Call"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Required for options orders. Must match the terms of the option contract being traded.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 202,
+    "name": "StrikePrice",
+    "description": "Strike price of the option.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "For options, identifies the specific contract along with Symbol (55), MaturityMonthYear (200), and PutOrCall (201).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 203,
+    "name": "CoveredOrUncovered",
+    "description": "Indicates whether an options position is covered or uncovered.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {
+      "0": "Covered",
+      "1": "Uncovered (naked)"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Covered options require existing position in the underlying; uncovered options have higher margin requirements and regulatory implications.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 204,
+    "name": "OptAttribute",
+    "description": "Additional attribute to differentiate option series \u2014 typically a letter suffix.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used when multiple option series exist for the same strike, maturity, and put/call, differentiated by an additional character. Exchange-specific.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 205,
+    "name": "MaturityDay",
+    "description": "Specific calendar day within MaturityMonthYear for the expiry date.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Value is 1-31. Superseded by MaturityDate (541) in FIX 4.4 which provides the full YYYYMMDD date.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 207,
+    "name": "SecurityExchange",
+    "description": "Primary exchange where the security is listed.",
+    "data_type": "Exchange",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "XNAS": "NASDAQ",
+      "XNYS": "NYSE",
+      "ARCX": "NYSE Arca",
+      "XCBO": "CBOE",
+      "BATS": "CBOE BZX",
+      "EDGX": "CBOE EDGX",
+      "XCHI": "Chicago Stock Exchange"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "ISO 10383 MIC code. Helps identify the security when Symbol (55) alone is ambiguous (e.g. dual-listed securities).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 211,
+    "name": "PegDifference",
+    "description": "Offset from the peg price for pegged orders. Renamed PegOffsetValue in FIX 4.4.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "For ExecInst (18) containing pegged instructions. The signed offset from the reference price (e.g. -0.01 for 1 cent below midpoint).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 223,
+    "name": "CouponRate",
+    "description": "Coupon interest rate for a fixed-income security, expressed as a percentage.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used to identify a specific bond series alongside Issuer, MaturityDate, and other instrument identifiers.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 224,
+    "name": "CouponPaymentDate",
+    "description": "Date of the next coupon payment in YYYYMMDD format.",
+    "data_type": "LocalMktDate",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used in bond and fixed-income order identification.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 225,
+    "name": "IssueDate",
+    "description": "Original issuance date of the security in YYYYMMDD format.",
+    "data_type": "LocalMktDate",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used alongside other bond identifiers to unambiguously identify a fixed-income instrument.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 228,
+    "name": "Factor",
+    "description": "Amortization factor for mortgage-backed securities, expressed as a decimal fraction of original par.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "For MBS and ABS, Factor adjusts the face value for principal paydowns. Used to calculate settlement amount from par value.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 371,
+    "name": "RefTagID",
+    "description": "Tag number of the field that caused a session-level Reject.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "3",
+        "name": "Reject"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "When a session-level Reject (3) is sent, RefTagID indicates which field in the rejected message caused the problem.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 372,
+    "name": "RefMsgType",
+    "description": "MsgType (35) value of the rejected message.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "j",
+        "name": "Business Message Reject"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "3",
+        "name": "Reject"
+      },
+      {
+        "code": "j",
+        "name": "Business Message Reject"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "In a session-level Reject (3) or Business Message Reject (j), identifies the type of message that was rejected.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 373,
+    "name": "SessionRejectReason",
+    "description": "Coded reason for a session-level Reject.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "3",
+        "name": "Reject"
+      }
+    ],
+    "valid_values": {
+      "0": "Invalid tag number",
+      "1": "Required tag missing",
+      "2": "Tag not defined for message type",
+      "3": "Undefined tag",
+      "4": "Tag specified without a value",
+      "5": "Value out of range for this tag",
+      "6": "Incorrect data format for value",
+      "7": "Decryption problem",
+      "8": "Signature problem",
+      "9": "CompID problem",
+      "10": "SendingTime accuracy problem",
+      "11": "Invalid MsgType",
+      "12": "XML validation error",
+      "13": "Tag appears more than once",
+      "14": "Tag specified out of required order",
+      "15": "Repeating group fields out of order",
+      "16": "Incorrect NumInGroup count",
+      "17": "Non-data value includes field delimiter",
+      "99": "Other"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used with RefTagID (371) to pinpoint the exact nature of a malformed or invalid message.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 375,
+    "name": "DKReason",
+    "description": "Reason for a Don't Know Trade (DK) response. Indicates why the counterparty is unable to confirm or match the trade being referenced.",
+    "data_type": "char",
+    "fix_version_added": "FIX 4.2",
+    "required_in": [
+      {
+        "code": "Q",
+        "name": "Don't Know Trade"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "1": "Unknown Symbol",
+      "2": "Wrong Side",
+      "3": "Quantity Exceeds Order",
+      "4": "No Matching Order",
+      "5": "Price Exceeds Limit",
+      "6": "Calculation Difference",
+      "7": "Other"
+    },
+    "notes": "Required in Don't Know Trade (Q) messages. \"7 - Other\" should be accompanied by a free-text explanation in Tag 58 (Text).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 379,
+    "name": "BusinessRejectRefID",
+    "description": "The value of the identifier field from the message that was rejected at the business level.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "j",
+        "name": "Business Message Reject"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Contains the value from the ID field of the rejected message (e.g. the ClOrdID for a rejected New Order Single).",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 380,
+    "name": "BusinessRejectReason",
+    "description": "Coded reason for a Business Message Reject.",
+    "data_type": "Int",
+    "required_in": [
+      {
+        "code": "j",
+        "name": "Business Message Reject"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "Other",
+      "1": "Unknown ID",
+      "2": "Unknown security",
+      "3": "Unsupported message type",
+      "4": "Application not available",
+      "5": "Conditionally required field missing",
+      "6": "Not authorized",
+      "7": "DeliverTo firm not available",
+      "18": "Invalid price increment"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used alongside Text (58) to provide machine-readable business rejection reason.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 381,
+    "name": "GrossTradeAmt",
+    "description": "Total trade value before commissions, fees, and accrued interest.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Price \u00d7 Quantity. NetMoney (118) = GrossTradeAmt minus commissions.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 382,
+    "name": "NoContraBrokers",
+    "description": "Number of contra broker entries in the repeating group.",
+    "data_type": "NumInGroup",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Header for the contra broker repeating group in an Execution Report. Used for average price systems and EMS reporting.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 388,
+    "name": "DiscretionInst",
+    "description": "Defines the reference price from which discretionary instruction applies.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "0": "Related to displayed price",
+      "1": "Related to market price",
+      "2": "Related to primary price",
+      "3": "Related to local primary price",
+      "4": "Related to midpoint price",
+      "5": "Related to last trade price",
+      "6": "Related to VWAP"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Used with DiscretionOffsetValue (389) to define a discretionary price range around a reference point.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 389,
+    "name": "DiscretionOffsetValue",
+    "description": "Signed offset from the DiscretionInst reference price forming the discretionary price limit.",
+    "data_type": "Float",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Negative values indicate below the peg; positive values above. E.g. DiscretionInst=4 (midpoint), DiscretionOffsetValue=-0.02 means discretion to 2 cents below mid.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 423,
+    "name": "PriceType",
+    "description": "Describes how the Price (44) value should be interpreted.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "1": "Percentage of par",
+      "2": "Per unit (per share/contract)",
+      "3": "Fixed amount (monetary)",
+      "4": "Discount \u2014 percentage points below par",
+      "5": "Premium \u2014 percentage points above par",
+      "6": "Spread",
+      "7": "TED price",
+      "8": "TED yield",
+      "9": "Yield",
+      "10": "Fixed cabinet trade price",
+      "13": "Product ticks in halves",
+      "14": "Product ticks in fourths",
+      "15": "Product ticks in eighths",
+      "16": "Product ticks in sixteenths",
+      "17": "Product ticks in thirty-seconds",
+      "19": "Product ticks in one-twenty-eighths"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Critical for fixed-income where price is often expressed as percentage of par or yield rather than a cash price.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 424,
+    "name": "DayOrderQty",
+    "description": "Order quantity for the current trading day on a multi-day GTC order.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "For GTC orders, reflects how much of the order was active today specifically. Separate from the cumulative total over all days.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 425,
+    "name": "DayCumQty",
+    "description": "Cumulative filled quantity for the current trading day on a multi-day GTC order.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Today's filled quantity on a GTC order. Resets to 0 each trading day while CumQty (14) accumulates across all days.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 426,
+    "name": "DayAvgPx",
+    "description": "Average fill price for the current trading day on a multi-day GTC order.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Today's average price, distinct from AvgPx (6) which is the all-days average. Both are populated for GTC orders.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 427,
+    "name": "GTBookingInst",
+    "description": "Specifies booking instruction for GTC orders at end of trading day.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {
+      "0": "Book out all trades on day of execution",
+      "1": "Accumulate until order is completed or expires",
+      "2": "Accumulate until verbally notified otherwise"
+    },
+    "fix_version_added": "FIX 4.2",
+    "notes": "Relevant only for GTC orders. Determines whether each day's fills are booked out separately or accumulated.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 432,
+    "name": "ExpireDate",
+    "description": "Date the order expires, in YYYYMMDD (local market date) format.",
+    "data_type": "LocalMktDate",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.2",
+    "notes": "Required when TimeInForce (59)=6 (Good Till Date). More common than ExpireTime (126) for date-only expiry. US equities GTD orders typically use this field.",
+    "fix_versions": [
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 434,
+    "name": "CxlRejResponseTo",
+    "description": "Identifies whether the Order Cancel Reject is responding to a Cancel or a Cancel/Replace request.",
+    "data_type": "Char",
+    "required_in": [
+      {
+        "code": "9",
+        "name": "Order Cancel Reject"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "1": "Order Cancel Request",
+      "2": "Order Cancel/Replace Request"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Required in FIX 4.4+. Clarifies which type of modify request triggered this rejection.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 441,
+    "name": "ClearingAccount",
+    "description": "Clearing account number for the order.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Used when the clearing account differs from the trading account (Account 1). Required by some clearing firms.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 447,
+    "name": "PartyIDSource",
+    "description": "Identifies the naming convention used for the PartyID (448) value.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {
+      "B": "BIC (Bank Identification Code \u2014 SWIFT)",
+      "C": "Generally Accepted Market Participant Identifier",
+      "D": "Proprietary / Custom code",
+      "E": "ISO Country Code",
+      "F": "Settlement Entity Location",
+      "G": "MIC (ISO 10383 Market Identifier Code)",
+      "H": "CSD participant or member code",
+      "1": "Korean Investor ID",
+      "2": "Taiwanese Qualified Foreign Investor ID",
+      "4": "Malaysian Central Depository",
+      "5": "Chinese B Share",
+      "7": "US Social Security Number",
+      "8": "US Employer ID",
+      "9": "Australian Business Number"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Part of the repeating Parties group (NoPartyIDs/PartyID/PartyIDSource/PartyRole). Always accompanies PartyID (448).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 448,
+    "name": "PartyID",
+    "description": "Identifier for a party in the transaction, such as a broker, clearing firm, or client.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Part of the NoPartyIDs (453) repeating group. The format depends on PartyIDSource (447). PartyRole (452) specifies the party's role.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 452,
+    "name": "PartyRole",
+    "description": "Role of the party identified in PartyID (448).",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {
+      "1": "Executing Firm",
+      "2": "Broker of Credit",
+      "3": "Client ID",
+      "4": "Clearing Firm",
+      "5": "Investor ID",
+      "6": "Introducing Firm",
+      "7": "Entering Firm",
+      "8": "Locate/Lending Firm",
+      "9": "Fund Manager Client ID",
+      "11": "Order Origination Trader",
+      "12": "Executing Trader",
+      "13": "Order Origination Firm",
+      "14": "Giveup Clearing Firm",
+      "17": "Contra Firm",
+      "18": "Contra Clearing Firm",
+      "21": "Clearing Organization",
+      "22": "Exchange",
+      "24": "Customer Account",
+      "28": "Custodian",
+      "29": "Intermediary",
+      "30": "Agent",
+      "32": "Beneficiary",
+      "36": "Entering Trader",
+      "37": "Contra Trader",
+      "38": "Position Account",
+      "44": "Order Entry Operator ID",
+      "45": "Secondary Account Number"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Each entry in the repeating parties group has a distinct role. Replaces deprecated fields ExecBroker (76) and ClientID (109).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 453,
+    "name": "NoPartyIDs",
+    "description": "Number of entries in the Parties repeating group.",
+    "data_type": "NumInGroup",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Header count for the parties group. Each entry provides PartyID (448), PartyIDSource (447), and PartyRole (452). Replaces the deprecated ExecBroker (76) and ClientID (109) fields.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 454,
+    "name": "NoSecurityAltID",
+    "description": "Number of alternate security identifiers in the repeating group.",
+    "data_type": "NumInGroup",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Header for the security alternate ID repeating group. Allows a security to be identified by multiple schemes simultaneously.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 455,
+    "name": "SecurityAltID",
+    "description": "Alternate security identifier value.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Used in the NoSecurityAltID repeating group to provide additional security identifiers (e.g. both CUSIP and ISIN for the same security).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 456,
+    "name": "SecurityAltIDSource",
+    "description": "Source of the alternate security identifier in SecurityAltID (455).",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "1": "CUSIP",
+      "2": "SEDOL",
+      "3": "QUIK",
+      "4": "ISIN number",
+      "5": "RIC code",
+      "6": "ISO Currency Code",
+      "7": "ISO Country Code",
+      "8": "Exchange Symbol",
+      "9": "Consolidated Tape Association",
+      "A": "Bloomberg Symbol"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Same value set as SecurityIDSource (22). Always accompanies SecurityAltID (455) in the repeating group.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 460,
+    "name": "Product",
+    "description": "High-level product classification for the instrument.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "1": "Agency",
+      "2": "Commodity",
+      "3": "Corporate",
+      "4": "Currency",
+      "5": "Equity",
+      "6": "Government",
+      "7": "Index",
+      "8": "Loan",
+      "9": "Money Market",
+      "10": "Mortgage",
+      "11": "Municipal",
+      "12": "Other",
+      "13": "Financing"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Broad classification used for routing, reporting, and margin calculations.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 461,
+    "name": "CFICode",
+    "description": "ISO 10962 Classification of Financial Instruments (CFI) code \u2014 6-character alphanumeric.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Standardized 6-character code classifying the instrument type. First character indicates category (E=Equity, D=Debt, F=Future, O=Option, etc.).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 470,
+    "name": "CountryOfIssue",
+    "description": "ISO 3166-1 alpha-2 country code of the country where the security was issued.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Used for instrument identification, particularly for bonds. E.g. 'US', 'GB', 'DE'.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 471,
+    "name": "StateOrProvinceOfIssue",
+    "description": "State or province where the municipal or local-authority security was issued.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Used primarily for US municipal bonds to identify the issuing state (e.g. 'NY', 'CA').",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 472,
+    "name": "LocaleOfIssue",
+    "description": "Locale (city, county, or district) where the municipal security was issued.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Used for US municipal bonds alongside StateOrProvinceOfIssue (471).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 483,
+    "name": "TransBkdTime",
+    "description": "Time the trade was booked at the exchange or matching engine.",
+    "data_type": "UTCTimestamp",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "AE",
+        "name": "Trade Capture Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Captures the exchange-side booking time for the trade. Used in T+1 reconciliation and audit trail.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 487,
+    "name": "TradeReportTransType",
+    "description": "Transaction type of a Trade Capture Report.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AE",
+        "name": "Trade Capture Report"
+      }
+    ],
+    "valid_values": {
+      "0": "New",
+      "1": "Cancel",
+      "2": "Replace",
+      "3": "Release",
+      "4": "Reverse",
+      "5": "Cancel Due To Back Out Of Trade"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Indicates whether the Trade Capture Report is a new trade, a correction, or a cancellation.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 541,
+    "name": "MaturityDate",
+    "description": "Final maturity date of the instrument in YYYYMMDD format.",
+    "data_type": "LocalMktDate",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      },
+      {
+        "code": "F",
+        "name": "Order Cancel Request"
+      },
+      {
+        "code": "G",
+        "name": "Order Cancel/Replace Request"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Supersedes MaturityMonthYear (200) and MaturityDay (205) in FIX 4.4+. Provides the exact expiry date for derivatives or maturity for bonds.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 552,
+    "name": "NoSides",
+    "description": "Number of sides in a cross order repeating group.",
+    "data_type": "NumInGroup",
+    "required_in": [
+      {
+        "code": "s",
+        "name": "New Order \u2014 Cross"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Required in New Order Cross (MsgType=s). Always 2 for a cross \u2014 one buy side and one sell side.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 553,
+    "name": "Username",
+    "description": "Logon username. Used in FIX Logon (A) messages to authenticate the session initiator. Typically provided by the broker or exchange during connectivity setup.",
+    "data_type": "String",
+    "fix_version_added": "FIX 4.3",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "A",
+        "name": "Logon"
+      }
+    ],
+    "valid_values": {},
+    "notes": "Added in FIX 4.3. When used, typically required alongside Tag 554 (Password). The exact authentication mechanism is counterparty-specific.",
+    "fix_versions": [
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 554,
+    "name": "Password",
+    "description": "Logon password. Used alongside Tag 553 (Username) in FIX Logon (A) messages for session authentication. Transmitted in cleartext in the FIX message; production environments typically use encrypted sessions or one-time passwords.",
+    "data_type": "String",
+    "fix_version_added": "FIX 4.3",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "A",
+        "name": "Logon"
+      }
+    ],
+    "valid_values": {},
+    "notes": "Added in FIX 4.3. Counterparties that require authentication via Tag 98 EncryptMethod may use this field. Treat with care \u2014 the value appears in FIX logs.",
+    "fix_versions": [
+      "4.3",
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 571,
+    "name": "TradeReportID",
+    "description": "Unique identifier for a Trade Capture Report, assigned by the reporting party.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "AE",
+        "name": "Trade Capture Report"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Primary key for trade capture reporting. Referenced in subsequent corrections or cancellations via TradeReportRefID (572).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 572,
+    "name": "TradeReportRefID",
+    "description": "Reference to a prior Trade Capture Report being corrected or cancelled.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AE",
+        "name": "Trade Capture Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Contains the TradeReportID (571) of the original report when TradeReportTransType (487) is Cancel (1) or Replace (2).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 583,
+    "name": "ClOrdLinkID",
+    "description": "Links a new order to a previously transmitted order for algorithmic strategy chains.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Used to associate orders in an algorithmic strategy chain (e.g. bracket orders, contingent orders).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 584,
+    "name": "MassStatusReqID",
+    "description": "Unique identifier for an Order Mass Status Request.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "AF",
+        "name": "Order Mass Status Request"
+      }
+    ],
+    "optional_in": [
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "The sell-side echoes MassStatusReqID in each Execution Report sent in response to the mass status request.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 585,
+    "name": "MassStatusReqType",
+    "description": "Specifies the scope of orders to be included in the mass status response.",
+    "data_type": "Int",
+    "required_in": [
+      {
+        "code": "AF",
+        "name": "Order Mass Status Request"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "1": "Status for orders for a security",
+      "2": "Status for orders for an underlying security",
+      "3": "Status for orders for a product",
+      "4": "Status for orders for a CFICode",
+      "5": "Status for orders for a SecurityType",
+      "6": "Status for orders for a trading session",
+      "7": "Status for all orders",
+      "8": "Status for orders for a PartyID"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Allows buy-side to request status for a broad set of orders in a single message.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 588,
+    "name": "StartDate",
+    "description": "Start date for a swap or time-bounded order in YYYYMMDD format.",
+    "data_type": "LocalMktDate",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Used for FX swaps, repo agreements, and other instruments with a defined start and end date.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 589,
+    "name": "EndDate",
+    "description": "End date for a swap or time-bounded order in YYYYMMDD format.",
+    "data_type": "LocalMktDate",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "The far leg date for FX swaps or term repos. Used with StartDate (588).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 624,
+    "name": "LegSide",
+    "description": "Side (buy or sell) for an individual leg in a multileg order.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AB",
+        "name": "New Order \u2014 Multileg"
+      }
+    ],
+    "valid_values": {
+      "1": "Buy",
+      "2": "Sell",
+      "3": "Buy Minus",
+      "4": "Sell Plus",
+      "5": "Sell Short",
+      "6": "Sell Short Exempt"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Each leg in a multileg order has its own LegSide within the repeating legs group.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 626,
+    "name": "AllocType",
+    "description": "Describes the specific type or purpose of an Allocation message. Determines how the receiving party should interpret and process the allocation instruction.",
+    "data_type": "int",
+    "fix_version_added": "FIX 4.4",
+    "required_in": [
+      {
+        "code": "J",
+        "name": "Allocation Instruction"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "1": "Calculated \u2014 calculated quantities reported back to the executing broker",
+      "2": "Preliminary (without MiscFees and NetMoney)",
+      "3": "Sellside Calculated Using Preliminary (with MiscFees and NetMoney added)",
+      "4": "Sellside Calculated without Preliminary (sent unsolicited from the sellside)",
+      "5": "Ready-to-Book \u2014 Single Order",
+      "6": "Buyside Ready-to-Book \u2014 Combined Set of Orders",
+      "7": "Warehouse Instruction",
+      "8": "Ready-to-Book \u2014 Two-Sided",
+      "9": "Claim",
+      "10": "Reversal"
+    },
+    "notes": "Required in Allocation Instruction (J). Determines processing path \u2014 type 1 (Calculated) is the most common in post-trade confirmation flows.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 704,
+    "name": "LongQty",
+    "description": "Long position quantity in a position report.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AP",
+        "name": "Position Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Reports the total long quantity held in the position.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 705,
+    "name": "ShortQty",
+    "description": "Short position quantity in a position report.",
+    "data_type": "Qty",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AP",
+        "name": "Position Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Reports the total short quantity held in the position.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 715,
+    "name": "ClearingBusinessDate",
+    "description": "The business date used for clearing the trade.",
+    "data_type": "LocalMktDate",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AE",
+        "name": "Trade Capture Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "May differ from TradeDate (75) when the trade occurs after clearing cutoff time.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 721,
+    "name": "PosReqID",
+    "description": "Unique identifier for a position request or report.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AP",
+        "name": "Position Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Assigned by the initiating party when requesting position data. Echoed in the Position Report response.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 724,
+    "name": "PosReqType",
+    "description": "Specifies the type of position data being requested.",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AP",
+        "name": "Position Report"
+      }
+    ],
+    "valid_values": {
+      "0": "Positions",
+      "1": "Trades",
+      "2": "Exercises",
+      "3": "Assignments",
+      "4": "Settlement Activity",
+      "5": "Backout Message"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Determines the content of the Position Report response.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 728,
+    "name": "PosReqResult",
+    "description": "Result of the position request.",
+    "data_type": "Int",
+    "required_in": [
+      {
+        "code": "AP",
+        "name": "Position Report"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "0": "Valid request \u2014 positions provided",
+      "1": "Invalid or unsupported request",
+      "2": "No positions found matching criteria",
+      "3": "Not authorized to request positions",
+      "4": "Request for position not supported",
+      "99": "Other"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "First field to check in a Position Report to determine whether the request succeeded.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 730,
+    "name": "SettlPrice",
+    "description": "Settlement price used for mark-to-market or final settlement.",
+    "data_type": "Price",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AP",
+        "name": "Position Report"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "Used in derivatives position reports. The type of settlement price is identified by SettlPriceType (731).",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 731,
+    "name": "SettlPriceType",
+    "description": "Type of settlement price in SettlPrice (730).",
+    "data_type": "Int",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "AP",
+        "name": "Position Report"
+      }
+    ],
+    "valid_values": {
+      "1": "Final settlement price",
+      "2": "Theoretical settlement price"
+    },
+    "fix_version_added": "FIX 4.4",
+    "notes": "Final = actual exchange-published settlement. Theoretical = estimated value before official settlement.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 789,
+    "name": "NextExpectedMsgSeqNum",
+    "description": "Indicates the next sequence number the sender expects to receive from the counterparty, enabling gap detection and orderly session recovery.",
+    "data_type": "SeqNum",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "A",
+        "name": "Logon"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 4.4",
+    "notes": "When present in a Logon, the counterparty should verify no sequence gaps exist and resend any missed messages if needed.",
+    "fix_versions": [
+      "4.4",
+      "5.0",
+      "5.0sp1",
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 1115,
+    "name": "OrderCategory",
+    "description": "Categorizes an order for trade reporting and capacity purposes.",
+    "data_type": "Char",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "D",
+        "name": "New Order Single"
+      },
+      {
+        "code": "8",
+        "name": "Execution Report"
+      }
+    ],
+    "valid_values": {
+      "1": "Order",
+      "2": "Quote",
+      "3": "Privately Negotiated Trade",
+      "4": "Multileg order",
+      "5": "Linked order",
+      "6": "Quote Request",
+      "7": "Implied Order",
+      "8": "Cross Order"
+    },
+    "fix_version_added": "FIX 5.0 SP2",
+    "notes": "Used for post-trade reporting and capacity monitoring under MiFID II and other regulatory frameworks.",
+    "fix_versions": [
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 1128,
+    "name": "ApplVerID",
+    "description": "Identifies the FIX application version (message body version) when using FIXT 1.1 transport.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {
+      "0": "FIX27",
+      "1": "FIX30",
+      "2": "FIX35",
+      "3": "FIX40",
+      "4": "FIX41",
+      "5": "FIX42",
+      "6": "FIX43",
+      "7": "FIX44",
+      "8": "FIX50",
+      "9": "FIX50SP1",
+      "10": "FIX50SP2"
+    },
+    "fix_version_added": "FIX 5.0 SP2",
+    "notes": "In FIX 5.0 / FIXT 1.1, the session layer is separated from the application layer. ApplVerID specifies which FIX version governs the message body.",
+    "fix_versions": [
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 1129,
+    "name": "CstmApplVerID",
+    "description": "Custom application version identifier for proprietary extensions beyond the standard FIX spec.",
+    "data_type": "String",
+    "required_in": [],
+    "optional_in": [
+      {
+        "code": "All",
+        "name": "All Messages"
+      }
+    ],
+    "valid_values": {},
+    "fix_version_added": "FIX 5.0 SP2",
+    "notes": "Used alongside ApplVerID (1128) when a firm has defined extensions to the standard FIX application version.",
+    "fix_versions": [
+      "5.0sp2"
+    ]
+  },
+  {
+    "tag": 1137,
+    "name": "DefaultApplVerID",
+    "description": "The default application version for all messages in this session, specified during Logon.",
+    "data_type": "String",
+    "required_in": [
+      {
+        "code": "A",
+        "name": "Logon"
+      }
+    ],
+    "optional_in": [],
+    "valid_values": {
+      "9": "FIX50SP1",
+      "10": "FIX50SP2"
+    },
+    "fix_version_added": "FIX 5.0 SP2",
+    "notes": "Required in the Logon (A) message when using FIXT 1.1 to declare the default FIX application version for the session. Individual messages may override with ApplVerID (1128).",
+    "fix_versions": [
+      "5.0sp2"
+    ]
+  }
+]

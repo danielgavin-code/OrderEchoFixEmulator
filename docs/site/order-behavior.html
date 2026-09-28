@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order behavior - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html" aria-current="page">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="order-behavior">Order behavior</h1>
+<p>What happens to an order after it is acked is decided by <code>rules:</code> in the
+config. Rules are matched <strong>in order, first match wins</strong>, and the last rule
+must be a catch-all so that every order gets an answer.</p>
+<h2 id="matching">Matching</h2>
+<p>A rule matches on exactly one of:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Matches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>symbol: ZVZZT</code></td>
+<td>tag 55 exactly, case-sensitive</td>
+</tr>
+<tr>
+<td><code>first_letter: "A-D"</code></td>
+<td>the uppercased first character of tag 55, in that range</td>
+</tr>
+<tr>
+<td><code>first_letter: "Q"</code></td>
+<td>a single letter</td>
+</tr>
+<tr>
+<td><code>any: true</code></td>
+<td>everything</td>
+</tr>
+</tbody>
+</table>
+<p>Zero or several match keys in one rule is a config error, as is a rule set with
+no catch-all, an unknown behavior, or an impossible fill schedule.</p>
+<h2 id="behaviors">Behaviors</h2>
+<table>
+<thead>
+<tr>
+<th>Behavior</th>
+<th>After the ack</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>full_fill</code></td>
+<td>One fill of the whole quantity.</td>
+</tr>
+<tr>
+<td><code>partial_fill</code></td>
+<td>One fill per <code>fills</code> entry, then <code>then:</code>.</td>
+</tr>
+<tr>
+<td><code>cancel_after_ack</code></td>
+<td>One unsolicited cancel.</td>
+</tr>
+<tr>
+<td><code>ack_only</code></td>
+<td>Nothing. The order stays working.</td>
+</tr>
+<tr>
+<td><code>reject</code></td>
+<td>No ack at all — a reject ExecutionReport with <code>reject_code</code> and <code>text</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><code>then:</code> says what to do when the listed fills are done: <code>leave</code> (the remainder
+rests), <code>fill_rest</code> (one more fill for everything left), or <code>cancel</code> (an
+unsolicited cancel for the remainder).</p>
+<p><code>fills</code> entries are whole share counts or percentages of the order quantity:</p>
+<pre><code class="language-yaml">- name: e-to-g-partial
+  match: { first_letter: &quot;E-G&quot; }
+  behavior: partial_fill
+  fills: [&quot;40%&quot;, &quot;10%&quot;]
+  then: leave
+
+- name: odd-lots
+  match: { first_letter: &quot;N-P&quot; }
+  behavior: partial_fill
+  fills: [1, 2, 3, 405]
+  then: fill_rest
+</code></pre>
+<p>A percentage is floored, never less than one share, and the schedule may not sum
+to more than 100%.</p>
+<h2 id="scheduling">Scheduling</h2>
+<p>Events are spaced <code>delay_ms</code> apart — the rule's own, else
+<code>orders.default_delay_ms</code> — starting one delay after the ack. Nothing is
+instant, because a client that only works against instant fills is not
+finished.</p>
+<p>Orders live in memory for one engine run. They survive a dropped connection:
+scheduled fills stay due and fire on the first timer tick after the next Logon.
+They do not survive a restart.</p>
+<p>Two other settings shape the answers:</p>
+<pre><code class="language-yaml">orders:
+  default_delay_ms: 500
+  send_pending_acks: false        # send 150=6 / 150=E before cancel / replace acks
+  replace_ack_ordstatus: current  # current | replaced
+</code></pre>
+<h2 id="the-shipped-rules">The shipped rules</h2>
+<p>Every first letter has a different personality, so a client can be exercised
+without editing config. Both the default and the multi-session config ship with
+these.</p>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Rule</th>
+<th>What you get</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ZVZZT</code></td>
+<td><code>nasdaq-test-reject</code></td>
+<td>Immediate reject, "Unknown symbol"</td>
+</tr>
+<tr>
+<td><code>ZWZZT</code></td>
+<td><code>nasdaq-test-hold</code></td>
+<td>Ack, then nothing — a resting order</td>
+</tr>
+<tr>
+<td><code>A</code>–<code>D</code></td>
+<td><code>a-to-d-full</code></td>
+<td>Ack, then one full fill</td>
+</tr>
+<tr>
+<td><code>E</code>–<code>G</code></td>
+<td><code>e-to-g-partial</code></td>
+<td>Ack, then 40% and 10% fills; the rest rests</td>
+</tr>
+<tr>
+<td><code>H</code>–<code>J</code></td>
+<td><code>h-to-j-cancel</code></td>
+<td>Ack, then an unsolicited cancel</td>
+</tr>
+<tr>
+<td><code>K</code>–<code>M</code></td>
+<td><code>k-to-m-reject</code></td>
+<td>Immediate reject</td>
+</tr>
+<tr>
+<td><code>N</code>–<code>P</code></td>
+<td><code>odd-lots</code></td>
+<td>Fills of 1, 2, 3, 405, then the remainder</td>
+</tr>
+<tr>
+<td>anything else</td>
+<td><code>default</code></td>
+<td>Ack, then one full fill</td>
+</tr>
+</tbody>
+</table>
+<p><code>GET /rules</code> reports the effective rules in match order, including each one's
+delay and band setting.</p>
+<h2 id="pricing">Pricing</h2>
+<p>Limit orders fill at their own limit price. Market orders need a quote, and the
+ack <strong>never waits</strong> for one: the order is acked immediately with
+<code>price_source: pending</code>, the lookup runs in the background, and any scheduled
+fill holds until the quote lands and then goes out in order.</p>
+<pre><code class="language-yaml">pricing:
+  mode: live            # live | static
+  provider: yfinance
+  cache_seconds: 300
+  timeout_sec: 10
+  warm_symbols: [AAPL, MSFT, SPY]
+  static:
+    AAPL: 227.50
+    default: 100.00
+</code></pre>
+<p><code>static</code> mode reads the table (<code>static:config</code>). <code>live</code> mode asks yfinance,
+caches each symbol for <code>cache_seconds</code>, and warms <code>warm_symbols</code> in the
+background at startup so the first limit order of a run does not meet a cold
+cache. Startup never waits for that.</p>
+<p>On <strong>any</strong> failure — exception, timeout, missing or non-positive price — live
+mode falls back to the static table with source <code>static:fallback</code> and a WARNING
+in the engine log. It never raises and never blocks the event loop, so a network
+problem slows one order rather than stopping the emulator. <code>yfinance</code> is
+imported lazily, so <code>static</code> mode works without it installed.</p>
+<p>A manual fill of a still-pending order needs an explicit price; without one it
+is a <code>409 price_pending</code>.</p>
+<h2 id="price-band">Price band</h2>
+<p>A sell-side fat-finger collar. Limit orders — a <code>D</code> with <code>40=2</code>, and a <code>G</code> that
+moves a limit price — are checked against a reference quote <strong>before</strong> they are
+acked. Market orders never are.</p>
+<pre><code class="language-yaml">price_band:
+  enabled: true
+  pct: 10                  # allowed distance from the reference, percent
+  mode: aggressive         # aggressive | both
+  enforce_on_fallback: false
+  lookup_timeout_ms: 3000
+  on_no_reference: skip    # skip | reject
+</code></pre>
+<p><code>aggressive</code> rejects only the dangerous side — a buy above <code>ref + band</code>, a sell
+below <code>ref − band</code> — because offering to sell far above the market is not a fat
+finger, it just will not trade. <code>both</code> rejects any limit further than the band
+from the reference. A price exactly on the edge passes.</p>
+<p>A rejected <code>D</code> gets an ExecutionReport with <code>150=8 39=8 103=3</code> and a <code>58</code>
+saying what happened. A rejected <code>G</code> gets a <code>35=9</code> with <code>434=2 102=2</code>, and the
+order is left exactly as it was. Every decision is one engine-log line:</p>
+<pre><code>BAND  W1 BUY LMT 500.00 ref=227.50 (static:config) band=±10% -&gt; REJECT
+</code></pre>
+<p>The band is checked before the symbol's rule, so a silly price is refused on its
+own terms even when the rule would have rejected the order anyway.</p>
+<p>The check is <strong>skipped</strong> — never failed — when the band is off, when no
+reference arrives inside <code>lookup_timeout_ms</code> and <code>on_no_reference</code> is <code>skip</code>
+(each skip is a WARNING), or when the only quote available came from the
+fallback and <code>enforce_on_fallback</code> is false. <code>on_no_reference: reject</code> refuses
+the order instead, with <code>58=No reference price available</code>.</p>
+<p>Any rule may override the width with <code>price_band_pct: 2</code>, or opt out entirely
+with <code>price_band_pct: off</code>.</p>
+<h2 id="reject-codes">Reject codes</h2>
+<p>Which code goes on the wire depends on the session's version. Generated from the
+profiles.</p>
+<h3 id="executionreport-rejects-tag-103">ExecutionReport rejects (tag 103)</h3>
+<table>
+<thead>
+<tr>
+<th>reason</th>
+<th>FIX 4.2</th>
+<th>FIX 4.4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UNSUPPORTED_CHARACTERISTIC</td>
+<td><code>0</code> Broker/Exchange Option</td>
+<td><code>11</code> Unsupported Order Characteristic</td>
+</tr>
+<tr>
+<td>BAD_QUANTITY</td>
+<td><code>0</code> Broker/Exchange Option</td>
+<td><code>13</code> Incorrect Quantity</td>
+</tr>
+<tr>
+<td>BAD_PRICE</td>
+<td><code>0</code> Broker/Exchange Option</td>
+<td><code>0</code> Broker/Exchange Option</td>
+</tr>
+<tr>
+<td>DUPLICATE_CL_ORD_ID</td>
+<td><code>6</code> Duplicate Order</td>
+<td><code>6</code> Duplicate Order</td>
+</tr>
+<tr>
+<td>BAND_BREACH</td>
+<td><code>3</code> Order Exceeds Limit</td>
+<td><code>3</code> Order Exceeds Limit</td>
+</tr>
+<tr>
+<td>NO_REFERENCE</td>
+<td><code>0</code> Broker/Exchange Option</td>
+<td><code>99</code> Other</td>
+</tr>
+<tr>
+<td>RULE_REJECT</td>
+<td><code>0</code> Broker/Exchange Option</td>
+<td><code>0</code> Broker/Exchange Option</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ordercancelreject-rejects-tag-102">OrderCancelReject rejects (tag 102)</h3>
+<table>
+<thead>
+<tr>
+<th>reason</th>
+<th>FIX 4.2</th>
+<th>FIX 4.4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DUPLICATE_CL_ORD_ID</td>
+<td><code>2</code> Broker/exchange option</td>
+<td><code>6</code> Duplicate ClOrdID received</td>
+</tr>
+<tr>
+<td>CXL_TOO_LATE</td>
+<td><code>0</code> Too late to cancel</td>
+<td><code>0</code> Too late to cancel</td>
+</tr>
+<tr>
+<td>CXL_UNKNOWN_ORDER</td>
+<td><code>1</code> Unknown order</td>
+<td><code>1</code> Unknown order</td>
+</tr>
+<tr>
+<td>CXL_BROKER_OPTION</td>
+<td><code>2</code> Broker/exchange option</td>
+<td><code>2</code> Broker/exchange option</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-the-cancel-reject-is-answering">What the cancel reject is answering</h3>
+<table>
+<thead>
+<tr>
+<th>responding to</th>
+<th>CxlRejResponseTo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CANCEL</td>
+<td><code>434=1</code></td>
+</tr>
+<tr>
+<td>REPLACE</td>
+<td><code>434=2</code></td>
+</tr>
+</tbody>
+</table>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

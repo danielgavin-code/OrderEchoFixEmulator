@@ -1,0 +1,91 @@
+{
+  "_comment": [
+    "Hand-written guarantees for the tags the viewer relies on.",
+    "Base-file values win where they exist; entries under 'enums' and 'tags'",
+    "only fill gaps. Entries under 'version_enums' and a tag's 'versions' map",
+    "are version-specific, an axis the base file does not have, so they win",
+    "for that version."
+  ],
+  "tags": {
+    "32": {
+      "name": "LastQty",
+      "versions": { "FIX.4.0": "LastShares", "FIX.4.1": "LastShares", "FIX.4.2": "LastShares" }
+    }
+  },
+  "enums": {
+    "35": {
+      "0": "Heartbeat", "1": "TestRequest", "2": "ResendRequest",
+      "3": "Reject", "4": "SequenceReset", "5": "Logout", "A": "Logon",
+      "D": "NewOrderSingle", "F": "OrderCancelRequest",
+      "G": "OrderCancelReplaceRequest", "8": "ExecutionReport",
+      "9": "OrderCancelReject", "j": "BusinessMessageReject"
+    },
+    "39": {
+      "0": "New", "1": "PartiallyFilled", "2": "Filled", "3": "DoneForDay",
+      "4": "Canceled", "5": "Replaced", "6": "PendingCancel",
+      "8": "Rejected", "9": "Suspended", "A": "PendingNew",
+      "C": "Expired", "E": "PendingReplace"
+    },
+    "150": {
+      "0": "New", "1": "PartialFill", "2": "Fill", "3": "DoneForDay",
+      "4": "Canceled", "5": "Replace", "6": "PendingCancel",
+      "8": "Rejected", "A": "PendingNew", "C": "Expired",
+      "E": "PendingReplace", "F": "Trade", "G": "TradeCorrect",
+      "H": "TradeCancel"
+    },
+    "54": {
+      "1": "Buy", "2": "Sell", "3": "BuyMinus", "4": "SellPlus",
+      "5": "SellShort", "6": "SellShortExempt", "7": "Undisclosed",
+      "8": "Cross", "9": "CrossShort"
+    },
+    "40": {
+      "1": "Market", "2": "Limit", "3": "Stop", "4": "StopLimit",
+      "5": "MarketOnClose", "6": "WithOrWithout", "7": "LimitOrBetter",
+      "P": "Pegged"
+    },
+    "59": {
+      "0": "Day", "1": "GoodTillCancel", "2": "AtTheOpening",
+      "3": "ImmediateOrCancel", "4": "FillOrKill", "5": "GoodTillCrossing",
+      "6": "GoodTillDate", "7": "AtTheClose"
+    },
+    "20": { "0": "New", "1": "Cancel", "2": "Correct", "3": "Status" },
+    "21": {
+      "1": "AutomatedPrivate", "2": "AutomatedPublic", "3": "Manual"
+    },
+    "103": {
+      "0": "BrokerOption", "1": "UnknownSymbol", "2": "ExchangeClosed",
+      "3": "OrderExceedsLimit", "4": "TooLateToEnter", "5": "UnknownOrder",
+      "6": "DuplicateOrder", "11": "UnsupportedOrderCharacteristic",
+      "13": "IncorrectQuantity", "99": "Other"
+    },
+    "102": {
+      "0": "TooLateToCancel", "1": "UnknownOrder", "2": "BrokerOption",
+      "3": "AlreadyPending", "6": "DuplicateClOrdID"
+    },
+    "434": { "1": "OrderCancelRequest", "2": "OrderCancelReplaceRequest" },
+    "373": {
+      "0": "InvalidTagNumber", "1": "RequiredTagMissing",
+      "2": "TagNotDefinedForMessageType", "3": "UndefinedTag",
+      "4": "TagSpecifiedWithoutValue", "5": "ValueIncorrectForTag",
+      "6": "IncorrectDataFormat", "9": "CompIDProblem",
+      "10": "SendingTimeAccuracyProblem", "11": "InvalidMsgType"
+    },
+    "380": {
+      "0": "Other", "1": "UnknownID", "2": "UnknownSecurity",
+      "3": "UnsupportedMessageType", "4": "ApplicationNotAvailable",
+      "5": "ConditionallyRequiredFieldMissing"
+    },
+    "141": { "Y": "ResetSequenceNumbers", "N": "NoReset" },
+    "123": { "Y": "GapFill", "N": "SequenceReset" },
+    "43": { "Y": "PossibleDuplicate", "N": "Original" }
+  },
+  "version_enums": {
+    "FIX.4.2": {
+      "150": { "1": "PartialFill", "2": "Fill" }
+    },
+    "FIX.4.4": {
+      "150": { "F": "Trade", "1": "PartialFill (deprecated in 4.4)",
+               "2": "Fill (deprecated in 4.4)" }
+    }
+  }
+}

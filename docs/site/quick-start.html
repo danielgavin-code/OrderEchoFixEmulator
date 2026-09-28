@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quick start - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html" aria-current="page">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="quick-start">Quick start</h1>
+<p>Everything here is copy-and-paste. Nothing needs you to type at a prompt.</p>
+<h2 id="install">Install</h2>
+<p>Python 3.11 or newer.</p>
+<pre><code class="language-sh">python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+</code></pre>
+<h2 id="run-the-emulator">Run the emulator</h2>
+<pre><code class="language-sh">.venv/bin/python orderecho_Main.py
+</code></pre>
+<p>That uses <code>config/orderecho.yaml</code>: one FIX 4.2 session on <code>127.0.0.1:9878</code>,
+control API on <code>127.0.0.1:8090</code>. The banner tells you what is listening:</p>
+<pre><code>OrderEchoFixEmulator 0.8.0 (cook8) - 1 FIX session
+  config         : config/orderecho.yaml
+  evidence file  : data/evidence/20260927-093636.jsonl
+  fix log        : logs/fix
+  engine log     : logs/engine
+
+  session          version  route                      port   rules  band
+  ---------------- -------- -------------------------- ------ ------ ----
+  ORDERECHO-AGENT  FIX.4.2  ORDERECHO -&gt; AGENT         9878   8      10%
+
+  control api    : http://127.0.0.1:8090  (docs at /docs)
+  guide          : http://127.0.0.1:8090/guide
+  Ctrl+C to shut down.
+</code></pre>
+<p>Other configs ship with it:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_Main.py --config config/orderecho_fix44.yaml
+.venv/bin/python orderecho_Main.py --config config/orderecho_multi.yaml
+.venv/bin/python orderecho_Main.py --reset-seqnums     # both counters at 1
+</code></pre>
+<p>Ctrl+C sends a Logout, waits for the reply, and exits.</p>
+<h2 id="send-your-first-order">Send your first order</h2>
+<p>In another terminal:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_DemoClient.py order AAPL 1000 buy lmt 227.50
+</code></pre>
+<p><code>AAPL</code> starts with A, and the shipped rules fill anything in <code>A</code>–<code>D</code>
+completely, so you get an ack and then a fill:</p>
+<pre><code>Connecting to 127.0.0.1:9878 as AGENT [FIX.4.2]
+&lt;- Logon                 HeartBtInt=30
+-&gt; NewOrderSingle      AAPL 1000 BUY LMT 227.50  11=DEMO-1790501820812-1
+&lt;- ExecutionReport     AAPL exec=NEW status=NEW  cum=0 leaves=1000 avg=0.0000
+&lt;- ExecutionReport     AAPL exec=FILL status=FILLED  last=1000@227.50
+                       cum=1000 leaves=0 avg=227.5000
+&lt;- Logout              &quot;Logout acknowledged&quot;
+</code></pre>
+<p>Different first letters behave differently on purpose — see
+<a href="order-behavior.html">Order behavior</a>. Try a few:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_DemoClient.py order FDX 1000 buy lmt 250.00   # partials
+.venv/bin/python orderecho_DemoClient.py order HPQ 500 buy mkt           # cancelled
+.venv/bin/python orderecho_DemoClient.py order KO 300 buy lmt 60.00      # rejected
+.venv/bin/python orderecho_DemoClient.py order ZWZZT 500 buy lmt 10.00   # just rests
+</code></pre>
+<h2 id="several-orders-in-one-connection">Several orders in one connection</h2>
+<p>The <code>session</code> subcommand takes commands on standard input, so a whole scenario
+is one paste:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_DemoClient.py session &lt;&lt;'EOF'
+order AAPL 1000 buy lmt 227.50
+order FDX 1000 buy lmt 250.00
+status
+quit
+EOF
+</code></pre>
+<p>A replace or a cancel needs the ClOrdID of the order it is changing, and the
+client makes those up as it goes, so for those use the control API instead —
+or read the ClOrdID off the output and paste a second block. See
+<a href="demo-client.html">Demo client</a>.</p>
+<h2 id="see-it-in-the-viewer">See it in the viewer</h2>
+<p>While the engine is running, open:</p>
+<pre><code>http://127.0.0.1:8090/viewer
+</code></pre>
+<p>That is the log viewer over the engine's own logs: a filter bar, a live list of
+every message, a decoded field table for whichever one you click, and a
+timeline with consistency checks for any order. The guide you are reading is at
+<code>/guide</code> on the same port.</p>
+<p>The same thing on the command line:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_LogView.py view logs/fix/*.log
+.venv/bin/python orderecho_LogView.py timeline logs/fix/*.log --clordid DEMO-1790501820812-1
+.venv/bin/python orderecho_LogView.py stats logs/fix/*.log
+</code></pre>
+<h2 id="make-the-emulator-do-something-awkward">Make the emulator do something awkward</h2>
+<p>The control API is there for the things a venue would do on its own. Fill an
+order half way by hand:</p>
+<pre><code class="language-sh">curl -s localhost:8090/orders?status=open
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/fill \
+     -H 'content-type: application/json' -d '{&quot;qty&quot;: 300}'
+</code></pre>
+<p>Or break the next ExecutionReport's checksum, so the client has to discard it:</p>
+<pre><code class="language-sh">curl -sX POST localhost:8090/sessions/ORDERECHO-AGENT/inject/next \
+     -H 'content-type: application/json' \
+     -d '{&quot;msg_type&quot;: &quot;8&quot;, &quot;corrupt_checksum&quot;: true}'
+</code></pre>
+<p>See <a href="control-api.html">Control API</a> for the rest.</p>
+<h2 id="stop-everything">Stop everything</h2>
+<p>Ctrl+C in the engine's terminal. If something was left behind:</p>
+<pre><code class="language-sh">pkill -f orderecho_
+</code></pre>
+<h2 id="run-the-tests">Run the tests</h2>
+<pre><code class="language-sh">.venv/bin/python -m pytest -q
+</code></pre>
+<p>No test touches the network, and a guard fails the run if anything writes to
+the repository's own <code>data/</code> or <code>logs/</code>.</p>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

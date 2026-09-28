@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Troubleshooting - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html" aria-current="page">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="troubleshooting">Troubleshooting</h1>
+<h2 id="the-port-is-already-in-use">The port is already in use</h2>
+<pre><code>error: cannot listen on 127.0.0.1:9878: [Errno 48] Address already in use
+</code></pre>
+<p>Usually a previous run that did not exit. Find it:</p>
+<pre><code class="language-sh">lsof -nP -iTCP:9878 -sTCP:LISTEN
+</code></pre>
+<p>and stop it, or stop everything this emulator left behind:</p>
+<pre><code class="language-sh">pkill -f orderecho_
+</code></pre>
+<p>The control API port (8090) and the standalone viewer port (8091) fail the same
+way. A multi-session config binds one acceptor per distinct port, so the error
+names whichever one clashed.</p>
+<h2 id="leftover-processes">Leftover processes</h2>
+<p>An engine started in the background outlives the terminal that started it.</p>
+<pre><code class="language-sh">pgrep -fl orderecho_          # what is running
+pkill -f orderecho_           # stop all of it
+</code></pre>
+<h2 id="logon-is-refused-or-nothing-happens-at-all">Logon is refused, or nothing happens at all</h2>
+<p>Three different symptoms, three different causes.</p>
+<p><strong>A Logout saying <code>Incorrect BeginString, expected …</code>.</strong> The CompIDs matched a
+session but the version did not. The message names every version those CompIDs
+could have used. Fix <code>fix_version</code> on your side or point at the right session.</p>
+<p><strong>Nothing at all — the socket just closes.</strong> The CompIDs matched no session on
+that port. This is deliberate: there is no session to reject in. Check
+<code>sender_comp_id</code> and <code>target_comp_id</code>, and remember they are <strong>swapped</strong> as
+seen from each side — the emulator's <code>sender_comp_id</code> is your TargetCompID.
+The engine log has a WARNING naming what arrived.</p>
+<p><strong>A Logout saying <code>MsgSeqNum too low</code>.</strong> See below.</p>
+<p>To see what the sessions expect:</p>
+<pre><code class="language-sh">curl -s localhost:8090/sessions
+</code></pre>
+<h2 id="stale-sequence-numbers">Stale sequence numbers</h2>
+<p>Sequence numbers persist across restarts, in <code>data/seqnums/&lt;id&gt;.json</code>. A client
+that has forgotten its own numbers will be told its MsgSeqNum is too low.</p>
+<p>Three ways to start clean, in increasing order of bluntness:</p>
+<pre><code class="language-sh"># the client asks for it, in its Logon
+141=Y
+
+# one session, while the engine runs
+curl -sX POST localhost:8090/sessions/agent42/reset-seqnums
+
+# every session, at startup
+.venv/bin/python orderecho_Main.py --reset-seqnums
+</code></pre>
+<p>The demo client always sends <code>141=Y</code>, which is why it never hits this.</p>
+<p>A reset archives the message store aside with a timestamp rather than deleting
+it, so an earlier run's messages are still there if you need them.</p>
+<h2 id="yfinance-is-offline-or-slow">yfinance is offline, or slow</h2>
+<p>Live pricing needs the network. When it fails — exception, timeout, missing or
+non-positive price — the emulator falls back to the static table with source
+<code>static:fallback</code> and a WARNING in the engine log. It never raises and never
+blocks; one order is slower, and that is all.</p>
+<p>If you want no network at all:</p>
+<pre><code class="language-yaml">pricing:
+  mode: static
+  static:
+    AAPL: 227.50
+    default: 100.00
+</code></pre>
+<p><code>yfinance</code> is imported lazily, so static mode works without it installed.</p>
+<p>To see what price would be used for a symbol, and where it came from:</p>
+<pre><code class="language-sh">curl -s localhost:8090/price/AAPL
+</code></pre>
+<h2 id="the-price-band-did-not-fire">The price band did not fire</h2>
+<p>The band is skipped, never failed, in several situations. The engine log says
+which:</p>
+<ul>
+<li>the band is off for that session, or a rule set <code>price_band_pct: off</code>;</li>
+<li>the order is a market order — the band only checks limits;</li>
+<li>no reference price arrived inside <code>lookup_timeout_ms</code> and <code>on_no_reference</code>
+  is <code>skip</code> (the default), which logs a WARNING;</li>
+<li>the only quote available came from the static fallback and
+  <code>enforce_on_fallback</code> is false;</li>
+<li>the price was outside the band on the harmless side, and <code>mode</code> is
+  <code>aggressive</code>.</li>
+</ul>
+<p><code>GET /rules</code> reports the effective band for each rule, which is usually faster
+than reading the config.</p>
+<h2 id="the-api-says-409-ambiguous_session">The API says <code>409 ambiguous_session</code></h2>
+<p>An unscoped route was used with several sessions and no default. Either name
+the session:</p>
+<pre><code class="language-sh">curl -s localhost:8090/sessions/agent42/status
+</code></pre>
+<p>or set <code>engine.default_session</code> in the config. The error body lists the ids it
+could have meant.</p>
+<h2 id="the-order-routes-say-not_found-for-an-order-i-can-see">The order routes say <code>not_found</code> for an order I can see</h2>
+<p>Order state lives in memory for one engine run. After a restart the order book
+is empty, even though the logs still hold everything.</p>
+<p>The timeline route is the exception: it falls back to the logs, so
+<code>GET /orders/{id}/timeline</code> still answers for an order from an earlier run.</p>
+<h2 id="the-docs-are-out-of-date">The docs are out of date</h2>
+<p>The reference tables are generated. If a test says <code>docs/site is stale</code>:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_BuildDocs.py
+</code></pre>
+<p>That rebuilds <code>docs/site/</code> from <code>docs/src/</code> and the current code.</p>
+<h2 id="the-test-suite-fails-with-a-writing-guard">The test suite fails with a writing guard</h2>
+<pre><code>tests wrote to the repository's own data/ or logs/
+</code></pre>
+<p>A test built its config without <code>tests/isolation.isolated_config</code>. Every test
+must put its storage paths under <code>tmp_path</code>; the guard exists because a test
+that writes to the real <code>data/</code> corrupts the next run's sequence numbers.</p>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control API - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html" aria-current="page">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="control-api">Control API</h1>
+<p>A local HTTP API for making the emulator do things a real broker would do on
+its own: fill an order by hand, drop the connection, break a checksum on
+purpose.</p>
+<pre><code class="language-yaml">control_api:
+  enabled: true
+  host: 127.0.0.1
+  port: 8090
+</code></pre>
+<div class="callout warn">
+<p><span class="label">Local and unauthenticated</span>
+Loopback addresses only — a non-loopback <code>host</code> is refused at startup. There
+are no credentials and no TLS. It is a development tool, and it can move money
+around in your test environment as freely as you can.</p>
+</div>
+<p>It is <strong>emulator-only</strong>. A real venue has nothing like it, and a client under
+test must never need it for core behavior. It is for putting the client in a
+situation, not for being part of the situation.</p>
+<p>Nothing here bypasses the engine. Order actions go through the same pure order
+book as scheduled fills, and every message goes out through the session, so
+sequence numbers, evidence and logs stay correct.</p>
+<p>Three things are served on this port besides the API: this guide at <code>/guide</code>,
+the log viewer at <code>/viewer</code>, and FastAPI's own generated reference at <code>/docs</code>.</p>
+<h2 id="errors">Errors</h2>
+<p>Failures are 4xx with a body of the same shape:</p>
+<pre><code class="language-json">{&quot;error&quot;: &quot;not_found&quot;, &quot;detail&quot;: &quot;No such order: O-20260927-093636-9&quot;}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>not_found</code></td>
+<td>No such order, session, or symbol</td>
+</tr>
+<tr>
+<td><code>session_not_active</code></td>
+<td>The session is not logged on, so it cannot send</td>
+</tr>
+<tr>
+<td><code>order_closed</code></td>
+<td>The order has reached a terminal state</td>
+</tr>
+<tr>
+<td><code>invalid_request</code></td>
+<td>The body or query is wrong</td>
+</tr>
+<tr>
+<td><code>conflict</code></td>
+<td>Including <code>ambiguous_session</code> and <code>price_pending</code></td>
+</tr>
+</tbody>
+</table>
+<p>Order and session <strong>actions</strong> need an ACTIVE session. The read endpoints work in
+any state, including before anybody has connected.</p>
+<h2 id="scoped-and-unscoped-routes">Scoped and unscoped routes</h2>
+<p>With several sessions, every session-scoped route takes an id:</p>
+<pre><code class="language-sh">curl -s localhost:8090/sessions
+curl -s localhost:8090/sessions/agent44/status
+curl -sX POST localhost:8090/sessions/agent44/test-request
+</code></pre>
+<p>The unscoped routes — <code>/status</code>, <code>/session/*</code>, <code>/inject/*</code>, <code>/messages</code>,
+<code>/rules</code> — act on the <strong>default session</strong>: the only one if there is only one,
+otherwise <code>engine.default_session</code>. With several sessions and no default they
+answer <code>409 ambiguous_session</code> and list the ids rather than guess.</p>
+<p>Order routes are always engine-wide, because an OrderID names its own session.</p>
+<div class="callout note">
+<p><span class="label">Which to use</span>
+Prefer the scoped routes in anything you write down. The unscoped ones are kept
+so that one-session setups and older scripts keep working.</p>
+</div>
+<h2 id="common-tasks">Common tasks</h2>
+<p><strong>See what is going on:</strong></p>
+<pre><code class="language-sh">curl -s localhost:8090/health
+curl -s localhost:8090/sessions
+curl -s 'localhost:8090/orders?status=open'
+curl -s localhost:8090/orders/O-20260927-093636-1
+</code></pre>
+<p><strong>Fill an order by hand:</strong></p>
+<pre><code class="language-sh">curl -sX POST localhost:8090/orders/O-20260927-093636-1/fill \
+     -H 'content-type: application/json' -d '{&quot;qty&quot;: 300}'
+
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/fill \
+     -H 'content-type: application/json' -d '{&quot;qty&quot;: 300, &quot;price&quot;: &quot;227.55&quot;}'
+
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/fill-rest
+</code></pre>
+<p>A market order whose quote has not landed yet needs an explicit <code>price</code>;
+without one the answer is <code>409 price_pending</code>.</p>
+<p><strong>Hold an order, then let it go:</strong></p>
+<pre><code class="language-sh">curl -sX POST localhost:8090/orders/O-20260927-093636-1/hold      # stop the schedule
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/fill-rest # finish it by hand
+</code></pre>
+<p><strong>Cancel it as the counterparty would:</strong></p>
+<pre><code class="language-sh">curl -sX POST localhost:8090/orders/O-20260927-093636-1/cancel \
+     -H 'content-type: application/json' -d '{&quot;text&quot;: &quot;pulled by hand&quot;}'
+</code></pre>
+<p><strong>Drive the session:</strong></p>
+<pre><code class="language-sh">curl -sX POST localhost:8090/sessions/agent42/test-request
+curl -sX POST localhost:8090/sessions/agent42/logout \
+     -H 'content-type: application/json' -d '{&quot;text&quot;: &quot;end of test&quot;}'
+curl -sX POST localhost:8090/sessions/agent42/disconnect   # no Logout at all
+curl -sX POST localhost:8090/sessions/agent42/reset-seqnums
+</code></pre>
+<h2 id="deliberate-mischief">Deliberate mischief</h2>
+<p>To test how a client copes with a badly behaved counterparty:</p>
+<pre><code class="language-sh"># the next ExecutionReport carries a bogus tag
+curl -sX POST localhost:8090/sessions/agent42/inject/next \
+     -H 'content-type: application/json' \
+     -d '{&quot;msg_type&quot;: &quot;8&quot;, &quot;set&quot;: {&quot;9999&quot;: &quot;FOO&quot;}}'
+
+# ... or arrives with a broken CheckSum, so the client must discard it
+curl -sX POST localhost:8090/sessions/agent42/inject/next \
+     -H 'content-type: application/json' \
+     -d '{&quot;msg_type&quot;: &quot;8&quot;, &quot;corrupt_checksum&quot;: true}'
+
+# ... or without its TransactTime
+curl -sX POST localhost:8090/sessions/agent42/inject/next \
+     -H 'content-type: application/json' \
+     -d '{&quot;msg_type&quot;: &quot;8&quot;, &quot;remove&quot;: [&quot;60&quot;]}'
+
+# burn three outbound sequence numbers, so the client must ask for a resend
+curl -sX POST localhost:8090/sessions/agent42/inject/seq-gap \
+     -H 'content-type: application/json' -d '{&quot;skip&quot;: 3}'
+
+# send the last message again, marked PossDup
+curl -sX POST localhost:8090/sessions/agent42/inject/duplicate-last \
+     -H 'content-type: application/json' -d '{&quot;poss_dup&quot;: true}'
+
+# what is queued, and forget it
+curl -s localhost:8090/sessions/agent42/inject
+curl -sX DELETE localhost:8090/sessions/agent42/inject
+</code></pre>
+<p>Mutations queued with <code>inject/next</code> are one-shot — <code>count</code> applies one to
+several messages — and hit the next outbound message of the given type, or any
+type if <code>msg_type</code> is omitted. BodyLength and CheckSum are recomputed after a
+mutation unless <code>corrupt_checksum</code> asks for a broken one. Tags 8, 9 and 10
+cannot be set or removed.</p>
+<div class="callout note">
+<p><span class="label">Nothing deliberate is ever mistaken for a bug</span>
+Every injected message is recorded with <code>injected: true</code> in the evidence log,
+and its FIX log line ends with <code># injected: &lt;what was done&gt;</code>. The log viewer
+shows it as an <code>INJECTED</code> badge.</p>
+</div>
+<h2 id="endpoint-reference">Endpoint reference</h2>
+<p>Generated from the API's own OpenAPI document, so it lists what is actually
+served. A <code>?</code> after a body field means it is optional.</p>
+<table>
+<thead>
+<tr>
+<th>method</th>
+<th>path</th>
+<th>what it does</th>
+<th>body</th>
+<th>responses</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/health</code></td>
+<td>Version, build and uptime. Answers even when no client is connected.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/inject</code></td>
+<td>Clear injections on the default session. Prefer the scoped route.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/inject</code></td>
+<td>Injections on the default session. Prefer the session-scoped route.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/inject/duplicate-last</code></td>
+<td>Duplicate on the default session. Prefer the session-scoped route.</td>
+<td>(empty)</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/inject/next</code></td>
+<td>Inject into the default session. Prefer the session-scoped route.</td>
+<td><code>msg_type</code>?, <code>set</code>?, <code>remove</code>?, <code>corrupt_checksum</code>?, <code>count</code>?</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/inject/seq-gap</code></td>
+<td>Sequence gap on the default session. Prefer the session-scoped route.</td>
+<td><code>skip</code></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/messages</code></td>
+<td>Recent messages across every session.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/orders</code></td>
+<td>Orders across every session, newest first.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/orders/{order_id}</code></td>
+<td>One order: its quantities, state and the reports sent for it.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/orders/{order_id}/cancel</code></td>
+<td>Cancel a working order, as the counterparty would.</td>
+<td>(empty)</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/orders/{order_id}/fill</code></td>
+<td>Fill part of a working order, at a price you choose.</td>
+<td><code>qty</code>, <code>price</code>?</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/orders/{order_id}/fill-rest</code></td>
+<td>Fill everything the order has left.</td>
+<td>(empty)</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/orders/{order_id}/hold</code></td>
+<td>Stop the scheduled reports for an order and leave it working.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/orders/{order_id}/timeline</code></td>
+<td>One order's whole life plus the timeline checks, as JSON.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/price/{symbol}</code></td>
+<td>The reference price we would use for a symbol, and where it came from.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/rules</code></td>
+<td>The default session's behavior rules.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/session/disconnect</code></td>
+<td>Disconnect the default session. Prefer the session-scoped route.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/session/logout</code></td>
+<td>Logout on the default session. Prefer the session-scoped route.</td>
+<td>(empty)</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/session/reset-seqnums</code></td>
+<td>Reset the default session's sequence numbers. Prefer the scoped route.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/session/test-request</code></td>
+<td>TestRequest on the default session. Prefer the session-scoped route.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/sessions</code></td>
+<td>Every session this engine runs, and what each is doing.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/sessions/{session_id}/disconnect</code></td>
+<td>Drop the socket without a Logout, so the client sees a dead link.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/sessions/{session_id}/inject</code></td>
+<td>Forget every injection queued on one session.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/sessions/{session_id}/inject</code></td>
+<td>The injections queued on one session.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/sessions/{session_id}/inject/duplicate-last</code></td>
+<td>Send the last outbound message again, marked PossDup.</td>
+<td>(empty)</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/sessions/{session_id}/inject/next</code></td>
+<td>Alter the next outbound message of a type: set, remove or corrupt fields.</td>
+<td><code>msg_type</code>?, <code>set</code>?, <code>remove</code>?, <code>corrupt_checksum</code>?, <code>count</code>?</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/sessions/{session_id}/inject/seq-gap</code></td>
+<td>Skip outbound sequence numbers, so the client must ask for a resend.</td>
+<td><code>skip</code></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/sessions/{session_id}/logout</code></td>
+<td>Send a Logout and wait for the reply.</td>
+<td>(empty)</td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/sessions/{session_id}/messages</code></td>
+<td>Recent messages on one session, newest last.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/sessions/{session_id}/orders</code></td>
+<td>Orders belonging to one session.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/sessions/{session_id}/reset-seqnums</code></td>
+<td>Reset stored sequence numbers to 1/1 for one session.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/sessions/{session_id}/rules</code></td>
+<td>The behavior rules one session answers with.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/sessions/{session_id}/status</code></td>
+<td>One session: its identity, state, sequence numbers and counts.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/sessions/{session_id}/test-request</code></td>
+<td>Send a TestRequest and expect the Heartbeat that answers it.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/status</code></td>
+<td>The default session's status, for one-session setups.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/viewer/message/{index}</code></td>
+<td>One message with every field named and every enum decoded.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/viewer/messages</code></td>
+<td>Messages in time order, filtered; <code>after</code> returns only what is new.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/viewer/stats</code></td>
+<td>Counts per session, type and direction, plus the flag totals.</td>
+<td></td>
+<td>200</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/viewer/timeline</code></td>
+<td>One order's chain and its checks, found by ClOrdID or OrderID.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+</tbody>
+</table>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+session:
+  fix_version: FIX.4.2
+  sender_comp_id: ORDERECHO     # us
+  target_comp_id: AGENT         # the counterparty we expect
+  host: 127.0.0.1
+  port: 9878
+  heartbeat_grace_pct: 20       # TestRequest after HeartBtInt * 1.2 of silence
+  logout_timeout_sec: 10        # wait this long for Logout reply before disconnecting
+  resend_mode: replay           # replay | gapfill (gapfill = never resend app messages)
+
+storage:
+  seqnum_dir: data/seqnums
+  evidence_dir: data/evidence
+  msgstore_dir: data/msgstore
+
+control_api:
+  enabled: true
+  host: 127.0.0.1                 # loopback only: the API has no auth
+  port: 8090
+
+logging:
+  log_dir: logs
+  fix_delimiter: "|"            # "|" for readability; "SOH" writes real \x01
+  engine_level: INFO            # DEBUG | INFO | WARNING | ERROR
+  console: true                 # also echo to terminal
+
+orders:
+  default_delay_ms: 500
+  send_pending_acks: false        # send 150=6 / 150=E before cancel / replace acks
+  replace_ack_ordstatus: current  # current | replaced
+
+rules:                            # first match wins; edit freely
+  - name: nasdaq-test-reject
+    match: { symbol: ZVZZT }
+    behavior: reject
+    reject_code: 1
+    text: "Unknown symbol"
+
+  - name: nasdaq-test-hold
+    match: { symbol: ZWZZT }
+    behavior: ack_only
+
+  - name: a-to-d-full
+    match: { first_letter: "A-D" }
+    behavior: full_fill
+
+  - name: e-to-g-partial
+    match: { first_letter: "E-G" }
+    behavior: partial_fill
+    fills: ["40%", "10%"]
+    then: leave                   # leave | fill_rest | cancel
+
+  - name: h-to-j-cancel
+    match: { first_letter: "H-J" }
+    behavior: cancel_after_ack
+
+  - name: k-to-m-reject
+    match: { first_letter: "K-M" }
+    behavior: reject
+    reject_code: 0
+    text: "Rejected by OrderEcho rule"
+
+  - name: odd-lots
+    match: { first_letter: "N-P" }
+    behavior: partial_fill
+    fills: [1, 2, 3, 405]
+    then: fill_rest
+
+  - name: default
+    match: { any: true }
+    behavior: full_fill
+
+price_band:
+  enabled: true
+  pct: 10                  # allowed distance from reference, percent
+  mode: aggressive         # aggressive | both
+  enforce_on_fallback: false
+  lookup_timeout_ms: 3000  # max wait for a reference before the ack decision
+  on_no_reference: skip    # skip | reject when no reference price arrives
+
+pricing:
+  mode: live            # live | static
+  provider: yfinance
+  cache_seconds: 300
+  timeout_sec: 10
+  warm_symbols: [AAPL, MSFT, SPY]   # primed in the background at startup
+  static:
+    AAPL: 227.50
+    default: 100.00

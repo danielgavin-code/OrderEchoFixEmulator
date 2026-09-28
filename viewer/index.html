@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FIX log viewer</title>
+<link rel="stylesheet" href="/assets/orderecho.css">
+</head>
+<body class="viewer">
+<header class="topbar">
+  <h1>FIX log viewer <span class="sub" id="sub">loading…</span></h1>
+  <div class="bar">
+    <label class="visually-hidden" for="session">session</label>
+    <select id="session"><option value="">all sessions</option></select>
+    <input type="text" id="msgType" placeholder="35= D,8" aria-label="message types">
+    <label class="visually-hidden" for="dir">direction</label>
+    <select id="dir">
+      <option value="">both ways</option>
+      <option value="in">in</option>
+      <option value="out">out</option>
+    </select>
+    <input type="text" id="symbol" placeholder="symbol" aria-label="symbol">
+    <input type="text" id="clordid" placeholder="ClOrdID (chain)" aria-label="ClOrdID">
+    <input type="text" id="grep" placeholder="grep" aria-label="grep">
+    <label class="check"><input type="checkbox" id="rejects"> rejects</label>
+    <label class="check"><input type="checkbox" id="injected"> injected</label>
+    <label class="check"><input type="checkbox" id="live" checked> live</label>
+    <label class="check"><input type="checkbox" id="follow" checked> auto-scroll</label>
+    <button id="apply" class="primary">Apply</button>
+    <button id="clear">Clear</button>
+    <button id="statsBtn">Stats</button>
+  </div>
+</header>
+
+<main class="panes">
+  <div class="list" id="list" role="listbox" aria-label="messages">
+    <div class="empty">Loading…</div>
+  </div>
+  <aside class="detail" id="detail">
+    <h2>Message</h2>
+    <div class="empty">Click a message to decode it.</div>
+  </aside>
+</main>
+
+<div class="modal" id="sheet" hidden>
+  <div class="sheet">
+    <button class="close" id="sheetClose">Close</button>
+    <h2 id="sheetTitle">Timeline</h2>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const BASE = window.location.pathname.replace(/\/+$/, "");
+let cursor = 0, selected = null, timer = null;
+
+const esc = (s) => String(s === null || s === undefined ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const pad = (s, n) => String(s === null || s === undefined ? "-" : s)
+  .padEnd(n, " ");
+const padStart = (s, n) => String(s === null || s === undefined ? "-" : s)
+  .padStart(n, " ");
+
+function filters() {
+  const p = new URLSearchParams();
+  const add = (k, v) => { if (v) p.set(k, v); };
+  add("session", $("session").value);
+  add("msg_type", $("msgType").value.trim());
+  add("direction", $("dir").value);
+  add("symbol", $("symbol").value.trim());
+  add("clordid", $("clordid").value.trim());
+  add("grep", $("grep").value.trim());
+  if ($("rejects").checked) p.set("rejects", "true");
+  if ($("injected").checked) p.set("injected", "true");
+  p.set("live", $("live").checked ? "true" : "false");
+  return p;
+}
+
+const ARROWS = { in: "--&gt;", out: "&lt;--", disc: " x " };
+
+/* The words come from the server, which is the same code the CLI prints, so
+   a message reads identically in both.  This only lays them out. */
+function row(m) {
+  const arrow = ARROWS[m.direction] || " ? ";
+  const body = esc(m.summary);
+  return `<button class="msg" data-i="${m.index}" role="option"` +
+    ` aria-selected="false">` +
+    `<span class="t">${esc(pad(m.stamp, 21))}</span> ` +
+    `<span class="d-${esc(m.direction)}">${arrow}</span> ` +
+    `<span class="sess">${esc(pad(m.session, 14))}</span> ` +
+    `<span class="seq">${esc(padStart(m.seq, 5))}</span> ` +
+    `<span class="name">${esc(pad(m.msg_type_name, 22))}</span> ` +
+    `<span class="body-${esc(m.style || "plain")}">${body}</span>` +
+    (m.flags.length
+      ? ` <span class="flag">[${esc(m.flags.join(" "))}]</span>` : "") +
+    `</button>`;
+}
+
+async function load(reset) {
+  if (reset) { cursor = 0; $("list").innerHTML = ""; }
+  const p = filters();
+  p.set("after", String(cursor));
+  const res = await fetch(`${BASE}/messages?${p}`);
+  if (!res.ok) return;
+  const data = await res.json();
+  if (data.messages.length) {
+    cursor = data.cursor;
+    $("list").insertAdjacentHTML("beforeend", data.messages.map(row).join(""));
+    if ($("follow").checked) $("list").scrollTop = $("list").scrollHeight;
+  }
+  if (!$("list").children.length) {
+    $("list").innerHTML = '<div class="empty">No messages match.</div>';
+  }
+  const sel = $("session");
+  if (sel.options.length - 1 !== data.sessions.length) {
+    const keep = sel.value;
+    sel.innerHTML = '<option value="">all sessions</option>' +
+      data.sessions.map((s) => `<option>${esc(s)}</option>`).join("");
+    sel.value = keep;
+  }
+  $("sub").textContent = `${data.total} messages`;
+}
+
+function openSheet(title, html) {
+  $("sheetTitle").innerHTML = title;
+  $("sheetBody").innerHTML = html;
+  $("sheet").hidden = false;
+}
+
+async function showDetail(index) {
+  const res = await fetch(`${BASE}/message/${index}`);
+  if (!res.ok) return;
+  const m = await res.json();
+  const map = {};
+  (m.fields || []).forEach(([t, v]) => { if (!(t in map)) map[t] = v; });
+  const id = map["11"] || map["37"];
+  const rows = (m.decoded || []).map((d) =>
+    `<tr><td class="tag">${d.tag}</td><td>${esc(d.name)}</td>` +
+    `<td>${esc(d.value)}</td><td class="enum">${esc(d.enum || "")}</td></tr>`
+  ).join("");
+  const badges = m.flags.map((f) =>
+    `<span class="badge ${esc(f)}">${esc(f)}</span>`).join(" ");
+  $("detail").innerHTML =
+    `<h2>${esc(m.msg_type_name)} <span class="badge ${esc(m.direction)}">` +
+    `${esc(m.direction)}</span> seq ${m.seq === null ? "-" : m.seq} ` +
+    `${badges}</h2>` +
+    (id ? `<p><button id="tlBtn" data-id="${esc(id)}" ` +
+          `data-kind="${map["11"] ? "clordid" : "order_id"}">Timeline</button>` +
+          `</p>` : "") +
+    `<div class="raw">${esc(m.raw)}</div>` +
+    `<div class="scroll-x"><table><thead><tr><th>tag</th><th>name</th>` +
+    `<th>value</th><th>meaning</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table></div>`;
+  const btn = $("tlBtn");
+  if (btn) btn.onclick = () => showTimeline(btn.dataset.kind, btn.dataset.id);
+}
+
+async function showTimeline(kind, id) {
+  const p = new URLSearchParams(); p.set(kind, id);
+  const res = await fetch(`${BASE}/timeline?${p}`);
+  if (!res.ok) {
+    openSheet("Timeline", '<div class="empty">No chain found.</div>');
+    return;
+  }
+  const c = await res.json();
+  const steps = c.steps.map((s) => {
+    const marks = (s.replay ? ['<span class="badge">REPLAY</span>'] : [])
+      .concat((s.flags || []).map((f) =>
+        `<span class="badge ${esc(f)}">${esc(f)}</span>`)).join(" ");
+    return `<tr>
+      <td>${esc(s.ts || "-")}</td>
+      <td><span class="badge ${esc(s.direction)}">${esc(s.direction)}</span></td>
+      <td>${esc(s.msg_type_name || s.msg_type)}</td>
+      <td>${esc(s.exec_type || "-")}</td><td>${esc(s.ord_status || "-")}</td>
+      <td>${esc(s.order_qty || "-")}</td><td>${esc(s.last || "-")}</td>
+      <td>${esc(s.cum_qty || "-")}</td><td>${esc(s.leaves_qty || "-")}</td>
+      <td>${esc(s.avg_px || "-")}</td>
+      <td>${marks}</td></tr>`;
+  }).join("");
+  const checks = c.checks.map((k) =>
+    `<div class="check"><span class="badge ${k.status}">${k.status}</span> ` +
+    `<span class="what">${esc(k.name)}</span> ` +
+    `<span class="why">${esc(k.explanation)}</span></div>`).join("");
+  openSheet(
+    `Timeline ${esc(c.seed)} <span class="badge ${c.verdict}">` +
+    `${c.verdict}</span>`,
+    `<div class="scroll-x"><table><thead><tr><th>time</th><th>dir</th>` +
+    `<th>type</th><th>exec</th><th>status</th><th>qty</th><th>last</th>` +
+    `<th>cum</th><th>leaves</th><th>avg</th><th>flags</th></tr></thead>` +
+    `<tbody>${steps}</tbody></table></div><h3>Checks</h3>${checks}`);
+}
+
+async function showStats() {
+  const res = await fetch(`${BASE}/stats`);
+  if (!res.ok) return;
+  const s = await res.json();
+  const table = (title, obj) =>
+    `<h3>${title}</h3><div class="scroll-x"><table><tbody>` +
+    Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
+      `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("") +
+    "</tbody></table></div>";
+  openSheet("Stats",
+    `<dl class="kv"><dt>messages</dt><dd>${s.messages}</dd>` +
+    `<dt>files</dt><dd>${s.files.length}</dd>` +
+    `<dt>first</dt><dd>${esc(s.first || "-")}</dd>` +
+    `<dt>last</dt><dd>${esc(s.last || "-")}</dd></dl>` +
+    table("By session", s.by_session) +
+    table("By message type", s.by_msg_type) +
+    table("By direction", s.by_direction) +
+    table("Flags", { injected: s.injected, rejects: s.rejects,
+                     "bad checksum": s.bad_checksum,
+                     "bad length": s.bad_length,
+                     "unparseable lines": s.unparseable_lines }));
+}
+
+$("list").addEventListener("click", (e) => {
+  const el = e.target.closest(".msg");
+  if (!el) return;
+  if (selected) selected.setAttribute("aria-selected", "false");
+  selected = el; el.setAttribute("aria-selected", "true");
+  showDetail(Number(el.dataset.i));
+});
+$("apply").onclick = () => load(true);
+$("clear").onclick = () => {
+  ["msgType", "symbol", "clordid", "grep"].forEach((id) => $(id).value = "");
+  $("session").value = ""; $("dir").value = "";
+  $("rejects").checked = false; $("injected").checked = false;
+  load(true);
+};
+$("statsBtn").onclick = showStats;
+$("sheetClose").onclick = () => { $("sheet").hidden = true; };
+$("sheet").addEventListener("click", (e) => {
+  if (e.target === $("sheet")) $("sheet").hidden = true;
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("sheet").hidden = true;
+});
+["msgType", "symbol", "clordid", "grep"].forEach((id) =>
+  $(id).addEventListener("keydown",
+    (e) => { if (e.key === "Enter") load(true); }));
+
+function tick() {
+  clearInterval(timer);
+  timer = setInterval(() => { if ($("live").checked) load(false); }, 1000);
+}
+load(true).then(tick);
+</script>
+</body>
+</html>

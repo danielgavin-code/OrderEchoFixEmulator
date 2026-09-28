@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo client - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html" aria-current="page">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="demo-client">Demo client</h1>
+<p><code>orderecho_DemoClient.py</code> is a small FIX initiator for driving the emulator
+before a real client exists. It is not the thing under test — it is the thing
+that saves you writing one to see whether the emulator works.</p>
+<p>Start the emulator first, then in another terminal:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_DemoClient.py order AAPL 1000 buy mkt
+</code></pre>
+<p>It logs on as the configured <code>target_comp_id</code> with <code>141=Y</code>, so a demo run never
+fights persisted sequence numbers. Every inbound message prints as one readable
+line, and it answers TestRequests.</p>
+<h2 id="subcommands">Subcommands</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>order &lt;SYM&gt; &lt;QTY&gt; &lt;side&gt; &lt;type&gt; [PX]</code></td>
+<td>Send one NewOrderSingle and wait for it to settle</td>
+</tr>
+<tr>
+<td><code>cancel-demo &lt;SYM&gt; &lt;QTY&gt; &lt;side&gt; &lt;type&gt; [PX]</code></td>
+<td>Send an order, then cancel it</td>
+</tr>
+<tr>
+<td><code>session</code></td>
+<td>Stay connected and take typed commands</td>
+</tr>
+</tbody>
+</table>
+<p>Side is <code>buy</code>, <code>sell</code>, <code>sellshort</code> or <code>sellshortexempt</code>. Type is <code>limit</code>/<code>lmt</code>
+or <code>market</code>/<code>mkt</code>; a limit order needs a price.</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_DemoClient.py order AAPL 1000 buy mkt
+.venv/bin/python orderecho_DemoClient.py order EFG 1000 sell lmt 10.25 --wait 5
+.venv/bin/python orderecho_DemoClient.py cancel-demo HJK 500 buy mkt
+</code></pre>
+<p><code>--wait</code> is a <strong>maximum</strong>, not a sleep (default 10 seconds). <code>order</code> returns as
+soon as its order is Filled, Canceled or Rejected; <code>cancel-demo</code> as soon as the
+cancel is acked or rejected.</p>
+<p><code>--no-exit</code> keeps the connection open after a one-shot command settles, and
+takes typed commands instead of logging out.</p>
+<h2 id="global-options">Global options</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config PATH</code></td>
+<td>which config to read the session details from</td>
+</tr>
+<tr>
+<td><code>--session ID</code></td>
+<td>use this session from a multi-session config</td>
+</tr>
+<tr>
+<td><code>--fix 4.2</code> / <code>4.4</code></td>
+<td>speak this version</td>
+</tr>
+<tr>
+<td><code>--host</code> / <code>--port</code></td>
+<td>override the address</td>
+</tr>
+</tbody>
+</table>
+<p><code>--session</code> picks a session out of a multi-session config and mirrors it: the
+client's SenderCompID becomes that session's TargetCompID, and it takes that
+session's version and port. It cannot be combined with <code>--fix</code>, because the
+session already says which version it speaks.</p>
+<p>All of these may be given <strong>before or after</strong> the subcommand.</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_DemoClient.py --session agent44 order AAPL 100 buy mkt
+.venv/bin/python orderecho_DemoClient.py --fix 4.4 session
+.venv/bin/python orderecho_DemoClient.py --port 9879 order AAPL 100 buy lmt 227.50
+</code></pre>
+<h2 id="session-mode">Session mode</h2>
+<p><code>session</code> keeps the connection open and reads commands, printing inbound
+messages as they arrive:</p>
+<pre><code>&gt; order AAPL 1000 buy mkt
+&gt; cancel DEMO-1790477068566
+&gt; replace DEMO-1790477068566 2000 10.50
+&gt; resend 1 0
+&gt; status
+&gt; help
+&gt; quit
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>order &lt;SYM&gt; &lt;QTY&gt; &lt;buy\|sell&gt; &lt;mkt\|lmt&gt; [PX]</code></td>
+<td>Send a NewOrderSingle</td>
+</tr>
+<tr>
+<td><code>cancel &lt;ClOrdID&gt;</code></td>
+<td>Cancel one of your orders</td>
+</tr>
+<tr>
+<td><code>replace &lt;ClOrdID&gt; &lt;QTY&gt; [PX]</code></td>
+<td>Replace quantity, and price if given</td>
+</tr>
+<tr>
+<td><code>resend &lt;begin&gt; [end]</code></td>
+<td>Send a ResendRequest</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>Every order this client has sent, and its state</td>
+</tr>
+<tr>
+<td><code>quit</code></td>
+<td>Log out and exit</td>
+</tr>
+</tbody>
+</table>
+<p><code>status</code> lists an order from the moment it is sent, not from the first report,
+so an order that gets no answer is visible as such. A message that arrives with
+<code>43=Y</code> is marked <code>(PossDup)</code>.</p>
+<p>Ctrl+C logs out cleanly; press it twice to leave at once.</p>
+<h2 id="piped-usage">Piped usage</h2>
+<p>Session mode reads standard input, so a scenario can be a single paste with no
+typing:</p>
+<pre><code class="language-sh">.venv/bin/python orderecho_DemoClient.py session &lt;&lt;'EOF'
+order AAPL 1000 buy lmt 227.50
+order FDX 1000 buy lmt 250.00
+order ZWZZT 500 buy lmt 10.00
+status
+quit
+EOF
+</code></pre>
+<div class="callout note">
+<p><span class="label">Replacing a piped order</span>
+<code>cancel</code> and <code>replace</code> need a ClOrdID, and the client generates those at send
+time, so a fixed script cannot know them in advance. Either read them off the
+output and send a second block, or use the
+<a href="control-api.html#common-tasks">control API</a>, where cancels and fills are
+addressed by OrderID and the engine tells you what those are.</p>
+</div>
+<h2 id="what-it-is-not">What it is not</h2>
+<p>It does not implement a full FIX session. It does the parts needed to be a
+useful counterparty to the emulator: logon, heartbeats, TestRequest replies,
+orders, cancels, replaces and ResendRequests. Sequence-number recovery,
+persistence and reconnection are the emulator's job here, not the demo's.</p>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

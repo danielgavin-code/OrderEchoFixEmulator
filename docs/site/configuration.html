@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html" aria-current="page">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="configuration">Configuration</h1>
+<p>One YAML file describes everything: which sessions exist, what they answer
+with, where files go. Three ship with the emulator.</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config/orderecho.yaml</code></td>
+<td>One FIX 4.2 session. The default.</td>
+</tr>
+<tr>
+<td><code>config/orderecho_fix44.yaml</code></td>
+<td>The same, one line different: FIX 4.4.</td>
+</tr>
+<tr>
+<td><code>config/orderecho_multi.yaml</code></td>
+<td>Three sessions, two of them sharing a port.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-sh">.venv/bin/python orderecho_Main.py --config config/orderecho_multi.yaml
+</code></pre>
+<p>A bad config is a startup error naming the key, not a surprise at run time.</p>
+<h2 id="two-shapes">Two shapes</h2>
+<p><strong>One session</strong> uses a <code>session:</code> block. This is the original shape and it still
+works unchanged:</p>
+<pre><code class="language-yaml">session:
+  fix_version: FIX.4.2
+  sender_comp_id: ORDERECHO
+  target_comp_id: AGENT
+  host: 127.0.0.1
+  port: 9878
+  heartbeat_grace_pct: 20
+  logout_timeout_sec: 10
+</code></pre>
+<p><strong>Several sessions</strong> use an <code>engine:</code> block and a <code>sessions:</code> list. Use one
+shape or the other; both together is an error.</p>
+<pre><code class="language-yaml">engine:
+  host: 127.0.0.1
+  fix_port: 9878              # the port a session without its own uses
+  default_session: agent42    # which session the unscoped API routes act on
+
+sessions:
+  - id: agent42
+    fix_version: FIX.4.2
+    sender_comp_id: ORDERECHO
+    target_comp_id: AGENT
+
+  - id: agent44
+    fix_version: FIX.4.4      # same CompIDs, same port, different dialect
+    sender_comp_id: ORDERECHO
+    target_comp_id: AGENT
+</code></pre>
+<p>Session ids may contain letters, digits, <code>_</code> and <code>-</code>. They name files, so keep
+them short. See <a href="sessions.html">Sessions &amp; FIX versions</a> for how a connection
+finds its session.</p>
+<h2 id="defaults-and-overrides">Defaults and overrides</h2>
+<p><code>defaults:</code> is what every entry in <code>sessions:</code> starts from. An entry's own keys
+win over it.</p>
+<pre><code class="language-yaml">defaults:
+  heartbeat_grace_pct: 20
+  logout_timeout_sec: 10
+  resend_mode: replay
+  orders: { default_delay_ms: 500 }
+  price_band: { enabled: true, pct: 10 }
+  rules: [ ... ]
+
+sessions:
+  - id: strict-broker
+    fix_version: FIX.4.2
+    sender_comp_id: STRICTBRK
+    target_comp_id: AGENT
+    port: 9879                    # a port of its own
+    price_band: { pct: 2 }        # merged over the defaults
+    rules: [ ... ]                # replaces the default list outright
+</code></pre>
+<p>The two merge rules are worth remembering because they differ:</p>
+<div class="callout note">
+<p><span class="label">How overrides combine</span>
+<code>orders</code> and <code>price_band</code> <strong>merge key by key</strong> — a session that sets only
+<code>pct</code> keeps the default <code>enabled</code>, <code>mode</code> and everything else. <code>rules</code>
+<strong>replaces</strong> the whole list, because a half-overridden rule set would match in
+an order nobody intended.</p>
+</div>
+<p>Anything not under <code>defaults:</code> or a session entry — <code>storage</code>, <code>logging</code>,
+<code>control_api</code>, <code>pricing</code> — belongs to the engine and is shared by every session.
+Pricing and its cache are engine-wide on purpose: two sessions asking about the
+same symbol should not disagree.</p>
+<h2 id="full-key-reference">Full key reference</h2>
+<p>Generated from the config schema in <code>orderecho_Config.py</code>, so it cannot drift
+from what the loader actually reads.</p>
+<h3 id="engine"><code>engine</code></h3>
+<p>Settings that belong to the process, not to one session. Multi-session configs only.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>host</code></td>
+<td><code>str</code></td>
+<td><code>127.0.0.1</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fix_port</code></td>
+<td><code>int</code></td>
+<td><code>9878</code></td>
+<td>the port a session without its own port listens on</td>
+</tr>
+<tr>
+<td><code>default_session</code></td>
+<td><code>str \| None</code></td>
+<td><code>none</code></td>
+<td>which session the unscoped API routes act on</td>
+</tr>
+<tr>
+<td><code>logon_timeout_sec</code></td>
+<td><code>float</code></td>
+<td><code>30.0</code></td>
+<td>how long a new connection may stay silent before we stop waiting for its Logon</td>
+</tr>
+</tbody>
+</table>
+<h3 id="session"><code>session</code></h3>
+<p>One session, the original shape. Use this or <code>sessions:</code>, never both.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fix_version</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td>FIX.4.2 or FIX.4.4</td>
+</tr>
+<tr>
+<td><code>sender_comp_id</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>target_comp_id</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>host</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>port</code></td>
+<td><code>int</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>heartbeat_grace_pct</code></td>
+<td><code>float</code></td>
+<td><code>required</code></td>
+<td>how much longer than HeartBtInt we wait</td>
+</tr>
+<tr>
+<td><code>logout_timeout_sec</code></td>
+<td><code>float</code></td>
+<td><code>required</code></td>
+<td>how long we wait for a Logout reply</td>
+</tr>
+<tr>
+<td><code>resend_mode</code></td>
+<td><code>str</code></td>
+<td><code>replay</code></td>
+<td>one of <code>replay</code>, <code>gapfill</code>; replay the real messages, or gap-fill them</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sessions"><code>sessions[]</code></h3>
+<p>A list of sessions. Each entry takes the session keys plus an <code>id</code>, and may override <code>orders</code>, <code>price_band</code> and <code>rules</code>.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td>letters, digits, _ and -</td>
+</tr>
+<tr>
+<td><code>fix_version</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td>FIX.4.2 or FIX.4.4</td>
+</tr>
+<tr>
+<td><code>sender_comp_id</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>target_comp_id</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>heartbeat_grace_pct</code></td>
+<td><code>float</code></td>
+<td><code>required</code></td>
+<td>how much longer than HeartBtInt we wait</td>
+</tr>
+<tr>
+<td><code>logout_timeout_sec</code></td>
+<td><code>float</code></td>
+<td><code>required</code></td>
+<td>how long we wait for a Logout reply</td>
+</tr>
+<tr>
+<td><code>resend_mode</code></td>
+<td><code>str</code></td>
+<td><code>replay</code></td>
+<td>one of <code>replay</code>, <code>gapfill</code>; replay the real messages, or gap-fill them</td>
+</tr>
+<tr>
+<td><code>host</code></td>
+<td><code>str</code></td>
+<td><code>engine.host</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>port</code></td>
+<td><code>int</code></td>
+<td><code>engine.fix_port</code></td>
+<td>give a session its own acceptor</td>
+</tr>
+</tbody>
+</table>
+<p>Nested sections: <code>orders</code>, <code>price_band</code>, <code>rules</code>.</p>
+<h3 id="defaults"><code>defaults</code></h3>
+<p>What every session in <code>sessions:</code> starts from. An entry's own keys win; <code>orders</code> and <code>price_band</code> merge key by key, <code>rules</code> replace wholesale.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>heartbeat_grace_pct</code></td>
+<td><code>float</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>logout_timeout_sec</code></td>
+<td><code>float</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>resend_mode</code></td>
+<td><code>str</code></td>
+<td><code>replay</code></td>
+<td>one of <code>replay</code>, <code>gapfill</code></td>
+</tr>
+</tbody>
+</table>
+<p>Nested sections: <code>orders</code>, <code>price_band</code>, <code>rules</code>.</p>
+<h3 id="storage"><code>storage</code></h3>
+<p>Where state that outlives a run is kept.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>seqnum_dir</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td>one JSON file per session</td>
+</tr>
+<tr>
+<td><code>evidence_dir</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td>one JSONL file per run</td>
+</tr>
+<tr>
+<td><code>msgstore_dir</code></td>
+<td><code>str</code></td>
+<td><code>data/msgstore</code></td>
+<td>outbound messages, for a real resend</td>
+</tr>
+</tbody>
+</table>
+<h3 id="logging"><code>logging</code></h3>
+<p>The two logs and how they are written.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log_dir</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fix_delimiter</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td>one of <code>\|</code>, <code>SOH</code></td>
+</tr>
+<tr>
+<td><code>engine_level</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td>one of <code>DEBUG</code>, <code>INFO</code>, <code>WARNING</code>, <code>ERROR</code></td>
+</tr>
+<tr>
+<td><code>console</code></td>
+<td><code>bool</code></td>
+<td><code>required</code></td>
+<td>also print the engine log to stdout</td>
+</tr>
+</tbody>
+</table>
+<h3 id="orders"><code>orders</code></h3>
+<p>How orders are answered. Per session in a multi-session config.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>default_delay_ms</code></td>
+<td><code>int</code></td>
+<td><code>500</code></td>
+<td>delay before each report, unless a rule says otherwise</td>
+</tr>
+<tr>
+<td><code>send_pending_acks</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>send 150=6/E before the cancel or replace</td>
+</tr>
+<tr>
+<td><code>replace_ack_ordstatus</code></td>
+<td><code>str</code></td>
+<td><code>current</code></td>
+<td>one of <code>current</code>, <code>replaced</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="pricing"><code>pricing</code></h3>
+<p>Where a reference price comes from.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mode</code></td>
+<td><code>str</code></td>
+<td><code>static</code></td>
+<td>one of <code>live</code>, <code>static</code></td>
+</tr>
+<tr>
+<td><code>provider</code></td>
+<td><code>str</code></td>
+<td><code>yfinance</code></td>
+<td>one of <code>yfinance</code></td>
+</tr>
+<tr>
+<td><code>cache_seconds</code></td>
+<td><code>float</code></td>
+<td><code>300.0</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>timeout_sec</code></td>
+<td><code>float</code></td>
+<td><code>10.0</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>static</code></td>
+<td><code>dict</code></td>
+<td><code>{}</code></td>
+<td>symbol -&gt; price, used in static mode and as the live fallback</td>
+</tr>
+<tr>
+<td><code>static_default</code></td>
+<td><code>Decimal</code></td>
+<td><code>100.00</code></td>
+<td>the price for a symbol not listed</td>
+</tr>
+<tr>
+<td><code>warm_symbols</code></td>
+<td><code>list</code></td>
+<td><code>[AAPL, MSFT, SPY]</code></td>
+<td>fetched once at startup</td>
+</tr>
+</tbody>
+</table>
+<h3 id="price_band"><code>price_band</code></h3>
+<p>The fat-finger collar. Per session in a multi-session config.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enabled</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>pct</code></td>
+<td><code>float</code></td>
+<td><code>10.0</code></td>
+<td>how far from the reference is allowed</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td><code>str</code></td>
+<td><code>aggressive</code></td>
+<td>one of <code>aggressive</code>, <code>both</code></td>
+</tr>
+<tr>
+<td><code>enforce_on_fallback</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>apply the band when the price came from the fallback</td>
+</tr>
+<tr>
+<td><code>lookup_timeout_ms</code></td>
+<td><code>float</code></td>
+<td><code>3000.0</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>on_no_reference</code></td>
+<td><code>str</code></td>
+<td><code>skip</code></td>
+<td>one of <code>skip</code>, <code>reject</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="control_api"><code>control_api</code></h3>
+<p>The HTTP control API. Loopback addresses only.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enabled</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>host</code></td>
+<td><code>str</code></td>
+<td><code>127.0.0.1</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>port</code></td>
+<td><code>int</code></td>
+<td><code>8090</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="rules"><code>rules[]</code></h3>
+<p>How a symbol is answered, first match wins. Per session in a multi-session config.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>type</th>
+<th>default</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>match</code></td>
+<td><code>mapping</code></td>
+<td><code>required</code></td>
+<td>one of <code>symbol</code>, <code>first_letter</code>, <code>any</code>; one of symbol, first_letter, any</td>
+</tr>
+<tr>
+<td><code>behavior</code></td>
+<td><code>str</code></td>
+<td><code>required</code></td>
+<td>one of <code>full_fill</code>, <code>partial_fill</code>, <code>cancel_after_ack</code>, <code>ack_only</code>, <code>reject</code></td>
+</tr>
+<tr>
+<td><code>fills</code></td>
+<td><code>list</code></td>
+<td><code>[]</code></td>
+<td>shares or percentages, e.g. [400, "10%"]</td>
+</tr>
+<tr>
+<td><code>then</code></td>
+<td><code>str</code></td>
+<td><code>leave</code></td>
+<td>one of <code>leave</code>, <code>fill_rest</code>, <code>cancel</code></td>
+</tr>
+<tr>
+<td><code>delay_ms</code></td>
+<td><code>int</code></td>
+<td><code>orders.default_delay_ms</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>reject_code</code></td>
+<td><code>str</code></td>
+<td><code>0</code></td>
+<td>the value for tag 103</td>
+</tr>
+<tr>
+<td><code>text</code></td>
+<td><code>str</code></td>
+<td><code>none</code></td>
+<td>tag 58</td>
+</tr>
+<tr>
+<td><code>price_band_pct</code></td>
+<td><code>float \| "off"</code></td>
+<td><code>none</code></td>
+<td>override the band for these symbols</td>
+</tr>
+</tbody>
+</table>
+<h2 id="a-note-on-paths">A note on paths</h2>
+<p><code>storage</code> and <code>logging</code> paths are relative to the working directory, and the
+directories are created at startup. <code>data/</code> and <code>logs/</code> are gitignored. See
+<a href="evidence-logs.html">Evidence &amp; logs</a> for what ends up in them.</p>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changelog - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html" aria-current="page">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="changelog">Changelog</h1>
+<p>The emulator was built in a series of overnight runs, each from a written
+spec. Each one is a version.</p>
+<h2 id="080-cook8">0.8.0 — cook8</h2>
+<p>Documentation and polish.</p>
+<ul>
+<li>This guide: twelve pages in <code>docs/src/</code>, built to <code>docs/site/</code> by
+  <code>orderecho_BuildDocs.py</code> and served by the engine at <code>/guide</code>. The reference
+  tables — config keys, ExecutionReport fields, reject codes, API endpoints,
+  timeline checks — are <strong>generated from the code</strong>, and a test fails if the
+  committed site is stale.</li>
+<li>One stylesheet, <code>web/orderecho.css</code>, shared by the guide and the log viewer,
+  built entirely from tokens in a single <code>:root</code> block.</li>
+<li>Log viewer fixes found in live testing: several files are merged by
+  timestamp instead of read one after another; the web list shows exactly what
+  the CLI shows, from the same code, with a seq column; replaces and cancels
+  say what they are changing (<code>Replace A-&gt;B qty 500-&gt;800 px 10.00-&gt;10.50</code>).</li>
+<li>An eleventh timeline check, <code>framing_intact</code>, and message flags as badges on
+  timeline rows.</li>
+<li><code>engine.logon_timeout_sec</code> is configurable (default 30).</li>
+</ul>
+<h2 id="070-cook7">0.7.0 — cook7</h2>
+<p>The log viewer: CLI and web, usable standalone on any FIX log.</p>
+<ul>
+<li><code>orderecho_LogParse.py</code>, a parser that reads this emulator's logs, evidence
+  JSONL, QuickFIX-style logs and pasted lines, with SOH, <code>|</code> or <code>^A</code>
+  delimiters. A badly framed message is kept and flagged rather than dropped.</li>
+<li><code>orderecho_Timeline.py</code>: order chains reconstructed from any ClOrdID or
+  OrderID, and ten consistency checks over them.</li>
+<li><code>orderecho_LogView.py</code>: <code>view</code>, <code>timeline</code>, <code>stats</code> and <code>serve</code>, with
+  filters, <code>--decode</code> and <code>--follow</code>.</li>
+<li>A web viewer, served standalone or by the engine at <code>/viewer</code>, and
+  <code>GET /orders/{id}/timeline</code> on the control API.</li>
+<li>Version-aware tag names, from FIXReader's dictionary plus a hand-written
+  overlay.</li>
+</ul>
+<h2 id="060-cook6">0.6.0 — cook6</h2>
+<p>Multiple concurrent sessions.</p>
+<ul>
+<li>One engine runs many sessions, each with its own CompIDs, version, sequence
+  numbers, message store, order book, rules, band and injection queue.</li>
+<li>A connection finds its session by (BeginString, SenderCompID,
+  TargetCompID), so two sessions can share a port if their versions differ.</li>
+<li>Session-scoped control API routes; the unscoped ones act on a default
+  session.</li>
+<li>FIX 4.4 golden fixtures captured before the refactor, and unchanged after it.</li>
+</ul>
+<h2 id="050-cook5">0.5.0 — cook5</h2>
+<p>FIX 4.4, per session.</p>
+<ul>
+<li>Version profiles: the order book decides what happened, a profile decides how
+  it is written. <code>150=F</code> and no tag 20 in 4.4, different reject codes, HandlInst
+  optional.</li>
+<li>Golden fixtures pinning the 4.2 rendering byte for byte, captured before any
+  of it moved.</li>
+<li>A test-isolation guard that fails the run if anything writes to the
+  repository's own <code>data/</code> or <code>logs/</code>.</li>
+</ul>
+<h2 id="040-cook4">0.4.0 — cook4</h2>
+<p>Everything live testing turned up, plus three features.</p>
+<ul>
+<li>Instant acks: a market order is acked immediately and its fills wait for the
+  quote, instead of the ack waiting.</li>
+<li>The price band, a sell-side fat-finger collar checked before the rules.</li>
+<li>ResendRequests answered by replaying the real messages from a message store
+  that survives a restart.</li>
+<li>Demo client session mode.</li>
+</ul>
+<h2 id="030-cook3">0.3.0 — cook3</h2>
+<p>The control API.</p>
+<ul>
+<li>Manual order actions — fill, fill-rest, cancel, hold — going through the same
+  order book as everything else.</li>
+<li>Session controls: TestRequest, Logout, disconnect, reset sequence numbers.</li>
+<li>Deliberate FIX mischief: set, remove or corrupt fields on the next outbound
+  message, burn sequence numbers, duplicate the last message. Everything it
+  does on purpose is labelled as such in the evidence and the logs.</li>
+</ul>
+<h2 id="020-cook2">0.2.0 — cook2</h2>
+<p>Orders.</p>
+<ul>
+<li>A pure order book: quantities, states, ExecIDs and a schedule.</li>
+<li>Behavior rules from config, matched first-wins on symbol or first letter.</li>
+<li>Pricing, live or static, with a fallback that never raises.</li>
+<li>The demo client.</li>
+</ul>
+<h2 id="010-cook1">0.1.0 — cook1</h2>
+<p>The session layer.</p>
+<ul>
+<li>A FIX codec, and a pure session core with no sockets and no wall clock:
+  Logon, Heartbeat, TestRequest, sequence numbers, ResendRequest,
+  SequenceReset, Logout and session Reject.</li>
+<li>An asyncio acceptor around it.</li>
+<li>The evidence log, the FIX log and the engine log.</li>
+</ul>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

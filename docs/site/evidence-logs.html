@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence &amp; logs - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html" aria-current="page">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="evidence-logs">Evidence &amp; logs</h1>
+<p>Three things are written while the emulator runs: a FIX log per session per
+day, one engine log per day, and one evidence file per run. Between them they
+answer "what did the emulator actually do", which is the whole point of a
+certification target.</p>
+<h2 id="where-files-go">Where files go</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FIX message log</td>
+<td><code>logs/fix/&lt;session-id&gt;_&lt;YYYYMMDD&gt;.log</code></td>
+</tr>
+<tr>
+<td>Engine log</td>
+<td><code>logs/engine/orderecho_&lt;YYYYMMDD&gt;.log</code></td>
+</tr>
+<tr>
+<td>Evidence</td>
+<td><code>data/evidence/&lt;run_id&gt;.jsonl</code></td>
+</tr>
+<tr>
+<td>Sequence numbers</td>
+<td><code>data/seqnums/&lt;session-id&gt;.json</code></td>
+</tr>
+<tr>
+<td>Outbound messages, for a real resend</td>
+<td><code>data/msgstore/&lt;session-id&gt;.jsonl</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>data/</code> and <code>logs/</code> are created at startup and are gitignored. The evidence
+file and the engine log are one per engine, not one per session; every record
+and every line names the session it came from.</p>
+<p>For a single-session config the session id is <code>&lt;SENDER&gt;-&lt;TARGET&gt;</code>.</p>
+<h2 id="the-fix-log">The FIX log</h2>
+<p>One line per message, raw message last so a line can be pasted straight into a
+decoder:</p>
+<pre><code>20260927-09:37:00.813 IN   seq=2    35=D  8=FIX.4.2|9=146|35=D|49=AGENT|...|10=209|
+20260927-09:37:00.836 OUT  seq=2    35=8  8=FIX.4.2|9=238|35=8|49=ORDERECHO|...|10=172|
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>timestamp</td>
+<td>when the emulator wrote it, to the millisecond</td>
+</tr>
+<tr>
+<td>direction</td>
+<td><code>IN</code>, <code>OUT</code>, or <code>DISC</code> for a message we discarded</td>
+</tr>
+<tr>
+<td><code>seq=</code></td>
+<td>MsgSeqNum, or <code>-</code></td>
+</tr>
+<tr>
+<td><code>35=</code></td>
+<td>message type, or <code>-</code></td>
+</tr>
+<tr>
+<td>the rest</td>
+<td>the raw message</td>
+</tr>
+</tbody>
+</table>
+<p><code>logging.fix_delimiter</code> chooses <code>|</code> or a real SOH between fields. <code>|</code> is the
+default because it survives being pasted into a terminal, a ticket or a chat
+window.</p>
+<p>A message the emulator broke on purpose ends its line with a comment saying
+what was done:</p>
+<pre><code>... |10=999|  # injected: corrupt checksum
+</code></pre>
+<h2 id="the-engine-log">The engine log</h2>
+<p>One line per thing worth knowing, at <code>logging.engine_level</code>:</p>
+<pre><code>20260927-09:36:35.587 INFO  session  engine  Acceptor listening on 127.0.0.1:9878 for agent42, agent44
+20260927-09:37:00.820 INFO  session  agent42 BAND  W1 BUY LMT 900.00 ref=341.07 (live:yfinance) band=±10% -&gt; REJECT
+20260927-09:37:06.101 INFO  session  agent42 ORDER O-20260927-093636-2 NEW  cum=0 leaves=1000
+</code></pre>
+<p><code>logging.console: true</code> also prints it to the terminal.</p>
+<p>Two kinds of line are worth knowing about:</p>
+<ul>
+<li><code>BAND ...</code> — one line per price-band decision, with the reference price and
+  where it came from. See <a href="order-behavior.html#price-band">Price band</a>.</li>
+<li><code>RESEND a..b -&gt; replayed N, gap-filled M run(s)</code> — what a ResendRequest was
+  answered with.</li>
+</ul>
+<h2 id="evidence">Evidence</h2>
+<p>One JSON object per line, flushed as it is written, in
+<code>data/evidence/&lt;run_id&gt;.jsonl</code>. The run id is the engine's start time, so a run
+is one file and files never collide.</p>
+<pre><code class="language-json">{
+  &quot;ts&quot;: &quot;2026-09-27T09:37:00.836Z&quot;,
+  &quot;run_id&quot;: &quot;20260927-093636&quot;,
+  &quot;kind&quot;: &quot;out&quot;,
+  &quot;session&quot;: &quot;agent42&quot;,
+  &quot;seq&quot;: 2,
+  &quot;msg_type&quot;: &quot;8&quot;,
+  &quot;raw&quot;: &quot;8=FIX.4.2|9=238|35=8|...|10=172|&quot;,
+  &quot;fields&quot;: [[&quot;8&quot;, &quot;FIX.4.2&quot;], [&quot;9&quot;, &quot;238&quot;], [&quot;35&quot;, &quot;8&quot;]],
+  &quot;detail&quot;: null,
+  &quot;order&quot;: {&quot;order_id&quot;: &quot;O-20260927-093636-2&quot;, &quot;ord_status&quot;: &quot;0&quot;},
+  &quot;injected&quot;: false
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kind</code></td>
+<td><code>in</code>, <code>out</code>, <code>discarded</code> or <code>event</code></td>
+</tr>
+<tr>
+<td><code>session</code></td>
+<td>which session it belongs to</td>
+</tr>
+<tr>
+<td><code>fields</code></td>
+<td>an <strong>ordered</strong> list of <code>[tag, value]</code> pairs</td>
+</tr>
+<tr>
+<td><code>detail</code></td>
+<td>free text, for events and discards</td>
+</tr>
+<tr>
+<td><code>order</code></td>
+<td>an order snapshot, or null for anything session-level</td>
+</tr>
+<tr>
+<td><code>injected</code></td>
+<td>true when the emulator did this on purpose</td>
+</tr>
+</tbody>
+</table>
+<p><code>fields</code> is a list rather than an object so field order survives and a repeated
+tag is not collapsed — both matter in FIX. <code>raw</code> uses <code>|</code> instead of SOH.</p>
+<p>Every outbound <code>35=8</code> or <code>35=9</code> is followed by an <code>event</code> record holding the
+order state that resulted, so the file answers "what did it think the order was"
+as well as "what did it send".</p>
+<div class="callout note">
+<p><span class="label">Evidence is a viewer input too</span>
+The log viewer reads evidence JSONL as happily as it reads a FIX log, so
+<code>orderecho_LogView.py view data/evidence/*.jsonl</code> works. See
+<a href="log-viewer.html">Log viewer</a>.</p>
+</div>
+<h2 id="the-message-store">The message store</h2>
+<p><code>data/msgstore/&lt;id&gt;.jsonl</code> holds every outbound message exactly as it went on
+the wire, so a ResendRequest can be answered with the real thing after a
+restart. When sequence numbers reset — a Logon with <code>141=Y</code>,
+<code>--reset-seqnums</code>, or <code>POST /sessions/{id}/reset-seqnums</code> — the store is
+renamed aside with a timestamp and a fresh one starts. Archives are never
+deleted.</p>
+<h2 id="tests-never-write-here">Tests never write here</h2>
+<p>A session-scoped guard fails the test run if anything writes to the
+repository's own <code>data/</code> or <code>logs/</code>. Tests build their config through
+<code>tests/isolation.isolated_config</code>, which puts every storage path under the
+test's temporary directory.</p>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

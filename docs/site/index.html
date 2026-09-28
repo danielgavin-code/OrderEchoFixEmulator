@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html" aria-current="page">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="overview">Overview</h1>
+<p>OrderEchoFixEmulator is a <strong>local FIX counterparty</strong>. It stands in for a broker
+or an exchange so that a client can be built and exercised without anybody's
+certification environment, credentials or trading calendar. It speaks FIX 4.2
+and FIX 4.4, runs one session or several at once, and answers orders the way a
+venue would: acks, partial fills, fills, cancels, replaces and rejects, with
+correct order state behind them.</p>
+<p>It runs as an <strong>acceptor</strong> — the venue side of the connection. You point a
+client at it.</p>
+<h2 id="why-it-exists">Why it exists</h2>
+<p>The wider goal is FIX certification driven by an LLM operator: an agent that
+connects to a venue's test system, works through a certification script, and
+says what happened and whether it was right. That agent needs somewhere to
+practise, somewhere its mistakes are cheap, and somewhere a scenario can be
+reproduced exactly. This emulator is that target.</p>
+<p>Which is why two things here are unusual for a mock:</p>
+<p><strong>It is honest about FIX.</strong> Sequence numbers, ResendRequests answered by
+replaying the real messages, session-level Rejects, version differences between
+4.2 and 4.4 — the details a client only gets wrong against a real venue are the
+details it can get wrong here.</p>
+<p><strong>It is honest about what it did.</strong> Every message in and out is logged, every
+decision is recorded in an evidence file, and the log viewer will reconstruct
+an order's life and check it for consistency. When the agent claims a test
+passed, there is a file that says so.</p>
+<h2 id="architecture">Architecture</h2>
+<p>The shape of the code is one idea: <strong>the parts that decide are pure, and the
+parts that touch the world are thin.</strong></p>
+<p><svg viewBox="0 0 700 300" role="img" aria-label="Architecture: a client
+connects to the transport, which drives pure session, order book and version
+profile components, and writes logs and evidence."
+     xmlns="http://www.w3.org/2000/svg"
+     style="max-width:100%;height:auto;color:inherit">
+  <g fill="none" stroke="currentColor" stroke-width="1.5"
+     font-family="system-ui, sans-serif" font-size="13">
+    <rect x="8" y="120" width="110" height="48" rx="6"/>
+    <text x="63" y="149" text-anchor="middle" stroke="none"
+          fill="currentColor">FIX client</text></p>
+<pre><code>&lt;rect x="168" y="106" width="120" height="76" rx="6"/&gt;
+&lt;text x="228" y="138" text-anchor="middle" stroke="none"
+      fill="currentColor"&gt;Transport&lt;/text&gt;
+&lt;text x="228" y="158" text-anchor="middle" stroke="none"
+      fill="currentColor" font-size="11" opacity="0.7"&gt;sockets, clock&lt;/text&gt;
+
+&lt;rect x="338" y="18" width="150" height="52" rx="6"/&gt;
+&lt;text x="413" y="49" text-anchor="middle" stroke="none"
+      fill="currentColor"&gt;Session&lt;/text&gt;
+
+&lt;rect x="338" y="92" width="150" height="52" rx="6"/&gt;
+&lt;text x="413" y="123" text-anchor="middle" stroke="none"
+      fill="currentColor"&gt;Order book&lt;/text&gt;
+
+&lt;rect x="338" y="166" width="150" height="52" rx="6"/&gt;
+&lt;text x="413" y="190" text-anchor="middle" stroke="none"
+      fill="currentColor"&gt;Rules&lt;/text&gt;
+&lt;text x="413" y="206" text-anchor="middle" stroke="none"
+      fill="currentColor" font-size="11" opacity="0.7"&gt;+ version profile&lt;/text&gt;
+
+&lt;rect x="338" y="240" width="150" height="46" rx="6"/&gt;
+&lt;text x="413" y="268" text-anchor="middle" stroke="none"
+      fill="currentColor"&gt;Pricing&lt;/text&gt;
+
+&lt;rect x="538" y="92" width="150" height="52" rx="6"/&gt;
+&lt;text x="613" y="117" text-anchor="middle" stroke="none"
+      fill="currentColor"&gt;Logs&lt;/text&gt;
+&lt;text x="613" y="134" text-anchor="middle" stroke="none"
+      fill="currentColor" font-size="11" opacity="0.7"&gt;FIX + engine&lt;/text&gt;
+
+&lt;rect x="538" y="166" width="150" height="52" rx="6"/&gt;
+&lt;text x="613" y="191" text-anchor="middle" stroke="none"
+      fill="currentColor"&gt;Evidence&lt;/text&gt;
+&lt;text x="613" y="208" text-anchor="middle" stroke="none"
+      fill="currentColor" font-size="11" opacity="0.7"&gt;JSONL per run&lt;/text&gt;
+
+&lt;rect x="168" y="18" width="120" height="52" rx="6"/&gt;
+&lt;text x="228" y="43" text-anchor="middle" stroke="none"
+      fill="currentColor"&gt;Control API&lt;/text&gt;
+&lt;text x="228" y="60" text-anchor="middle" stroke="none"
+      fill="currentColor" font-size="11" opacity="0.7"&gt;+ /guide, /viewer&lt;/text&gt;
+
+&lt;path d="M118 144 L168 144" marker-end="url(#arrow)"/&gt;
+&lt;path d="M288 130 L338 60" marker-end="url(#arrow)"/&gt;
+&lt;path d="M288 144 L338 122" marker-end="url(#arrow)"/&gt;
+&lt;path d="M288 158 L338 190" marker-end="url(#arrow)"/&gt;
+&lt;path d="M288 170 L338 258" marker-end="url(#arrow)"/&gt;
+&lt;path d="M488 118 L538 118" marker-end="url(#arrow)"/&gt;
+&lt;path d="M488 130 L538 186" marker-end="url(#arrow)"/&gt;
+&lt;path d="M228 106 L228 70" marker-end="url(#arrow)"/&gt;
+</code></pre>
+<p></g>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+</svg></p>
+<p><strong>Transport</strong> owns the sockets and the clock. It reads bytes, hands messages to
+a session, turns the actions it gets back into bytes, and runs the timer. It is
+the only part that can block.</p>
+<p><strong>Session</strong> is the FIX session layer: Logon, Heartbeat, TestRequest, sequence
+numbers, ResendRequest, SequenceReset, Logout, Reject. It is a function from
+(state, message) to a list of actions — <code>Send</code>, <code>Disconnect</code>, <code>Evidence</code> — and
+it has no idea what a socket is.</p>
+<p><strong>Order book</strong> owns orders: quantities, states, ExecIDs, and the schedule of
+what happens next. It is pure too, driven by an injected clock.</p>
+<p><strong>Rules</strong> decide what an order gets, from configuration. <strong>Version profiles</strong>
+decide how that is written on the wire — the order book says <em>a partial fill
+happened</em>, and the 4.2 profile writes <code>150=1</code> where the 4.4 profile writes
+<code>150=F</code>.</p>
+<p><strong>Pricing</strong> fetches reference prices, with a static table behind it.</p>
+<p><strong>Control API</strong> is an HTTP surface for making the emulator do things a venue
+would do on its own — fill by hand, drop the connection, break a checksum on
+purpose. It also serves this guide and the log viewer.</p>
+<h2 id="design-principles">Design principles</h2>
+<p><strong>The core is pure.</strong> No sockets, no wall clock, no randomness in the parts
+that decide. The same messages with the same config and the same prices produce
+the same output, every time. This is why the tests can drive real scenarios
+without a network, and why a captured scenario stays reproducible.</p>
+<p><strong>The wire format is pinned.</strong> Golden fixtures hold byte-for-byte renderings of
+both versions, captured before the refactors that could have changed them.
+Rendering drift is a test failure, not a discovery.</p>
+<p><strong>Nothing is bypassed.</strong> A manual fill from the control API goes through the
+same order book as a scheduled one, and out through the same session, so
+sequence numbers, logs and evidence stay correct. There is no back door that
+produces messages the engine does not know about.</p>
+<p><strong>Deliberate misbehaviour is labelled.</strong> The emulator can send a broken
+checksum or skip sequence numbers, because a client has to cope with that. Every
+such message is marked <code>injected</code> in the evidence and in the FIX log, so a
+deliberate fault can never be mistaken for a bug later.</p>
+<p><strong>It is local and unauthenticated, and it says so.</strong> Loopback only, no
+credentials, no TLS. It is a development tool, and the logs contain every order
+that went through it.</p>
+<h2 id="where-to-go-next">Where to go next</h2>
+<ul>
+<li><a href="quick-start.html">Quick start</a> — running, and a first order.</li>
+<li><a href="configuration.html">Configuration</a> — every key in the YAML.</li>
+<li><a href="order-behavior.html">Order behavior</a> — what an order gets, and why.</li>
+<li><a href="log-viewer.html">Log viewer</a> — reading back what happened.</li>
+</ul>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

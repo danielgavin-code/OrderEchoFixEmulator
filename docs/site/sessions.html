@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sessions &amp; FIX versions - OrderEchoFixEmulator</title>
+<link rel="stylesheet" href="assets/orderecho.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<a class="brand" href="index.html">OrderEchoFixEmulator</a>
+<span class="version">0.8.0 (cook8)</span>
+<nav aria-label="Guide">
+<ol>
+<li><a href="index.html">Overview</a></li>
+<li><a href="quick-start.html">Quick start</a></li>
+<li><a href="configuration.html">Configuration</a></li>
+<li><a href="sessions.html" aria-current="page">Sessions &amp; FIX versions</a></li>
+<li><a href="order-behavior.html">Order behavior</a></li>
+<li><a href="session-protocol.html">Session protocol</a></li>
+<li><a href="control-api.html">Control API</a></li>
+<li><a href="evidence-logs.html">Evidence &amp; logs</a></li>
+<li><a href="log-viewer.html">Log viewer</a></li>
+<li><a href="demo-client.html">Demo client</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+</ol>
+</nav>
+</aside>
+<main class="content">
+<h1 id="sessions-fix-versions">Sessions &amp; FIX versions</h1>
+<p>One engine can run several sessions at once. Each is fully independent: its own
+CompIDs, FIX version, sequence numbers, message store, order book, rules, price
+band and injection queue.</p>
+<p>Shared engine-wide: pricing and its cache, and the ID generator. An OrderID is
+unique across the engine, so it identifies an order without saying which
+session it came from — which is why the order routes of the control API need no
+session id.</p>
+<h2 id="how-a-connection-finds-its-session">How a connection finds its session</h2>
+<p>FIX identifies a session by three things, and so does this:</p>
+<p><strong>(BeginString, our SenderCompID, our TargetCompID)</strong></p>
+<p>The first message on a new connection must be a Logon. Its <code>(8, 56, 49)</code> — the
+version, and the CompIDs seen from our side — is matched against the sessions
+bound to the port it arrived on.</p>
+<table>
+<thead>
+<tr>
+<th>What arrived</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>An exact match</td>
+<td>The connection is handed that session.</td>
+</tr>
+<tr>
+<td>CompIDs match, version does not</td>
+<td>A Logout saying <code>Incorrect BeginString, expected …</code>, naming every version those CompIDs could have used, then the door.</td>
+</tr>
+<tr>
+<td>CompIDs match nothing</td>
+<td>Dropped with <strong>no reply</strong>, a WARNING in the engine log and an evidence record.</td>
+</tr>
+<tr>
+<td>A session that is already connected</td>
+<td>The second connection is refused.</td>
+</tr>
+</tbody>
+</table>
+<div class="callout note">
+<p><span class="label">Why no reply for unknown CompIDs</span>
+A session-level Reject needs a session to reject in, and there isn't one: we do
+not know who this is or what dialect they speak. Saying nothing is what a real
+venue does, and it is also what tells you your CompIDs are wrong rather than
+your message.</p>
+</div>
+<p>A connection that says nothing at all is dropped after
+<code>engine.logon_timeout_sec</code> (30 seconds by default).</p>
+<p>Two sessions may share a port and even share CompIDs, as long as their versions
+differ — the Logon's tag 8 tells them apart. <code>config/orderecho_multi.yaml</code> does
+exactly this with <code>agent42</code> and <code>agent44</code>.</p>
+<p>Ctrl+C logs every live session out at once and waits for their replies.</p>
+<h2 id="per-session-files">Per-session files</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sequence numbers</td>
+<td><code>data/seqnums/&lt;id&gt;.json</code></td>
+</tr>
+<tr>
+<td>Outbound messages, for a real resend</td>
+<td><code>data/msgstore/&lt;id&gt;.jsonl</code></td>
+</tr>
+<tr>
+<td>FIX message log</td>
+<td><code>logs/fix/&lt;id&gt;_&lt;YYYYMMDD&gt;.log</code></td>
+</tr>
+</tbody>
+</table>
+<p>The evidence file and the engine log stay one per engine run; every record and
+every line names the session it came from.</p>
+<p>For a single-session config the id is <code>&lt;SENDER&gt;-&lt;TARGET&gt;</code>, so the files keep the
+names they always had.</p>
+<h2 id="choosing-a-version">Choosing a version</h2>
+<p>The version belongs to the session:</p>
+<pre><code class="language-yaml">session:
+  fix_version: FIX.4.2      # or FIX.4.4
+</code></pre>
+<p>The order book decides <em>what happened</em>; a profile in <code>orderecho_FixVersion.py</code>
+decides <em>how it is written</em>. Nothing else in the engine knows which version it
+is speaking, which is why adding one is a profile rather than a sweep through
+the code.</p>
+<h2 id="what-differs-between-42-and-44">What differs between 4.2 and 4.4</h2>
+<p>Everything below is generated from the profiles themselves — the same objects
+the engine renders with.</p>
+<h3 id="fix-42">FIX 4.2</h3>
+<p>BeginString <code>FIX.4.2</code>, 21 body fields at most.</p>
+<table>
+<thead>
+<tr>
+<th>tag</th>
+<th>name</th>
+<th>sent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>37</code></td>
+<td>OrderID</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>11</code></td>
+<td>ClOrdID</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>41</code></td>
+<td>OrigClOrdID</td>
+<td>when it applies</td>
+</tr>
+<tr>
+<td><code>17</code></td>
+<td>ExecID</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>20</code></td>
+<td>ExecTransType</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>150</code></td>
+<td>ExecType</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>39</code></td>
+<td>OrdStatus</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td>Account</td>
+<td>when it applies</td>
+</tr>
+<tr>
+<td><code>55</code></td>
+<td>Symbol</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>54</code></td>
+<td>Side</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>38</code></td>
+<td>OrderQty</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>40</code></td>
+<td>OrdType</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>44</code></td>
+<td>Price</td>
+<td>when it applies</td>
+</tr>
+<tr>
+<td><code>32</code></td>
+<td>LastShares</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>31</code></td>
+<td>LastPx</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>151</code></td>
+<td>LeavesQty</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>14</code></td>
+<td>CumQty</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>6</code></td>
+<td>AvgPx</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>60</code></td>
+<td>TransactTime</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>103</code></td>
+<td>OrdRejReason</td>
+<td>when it applies</td>
+</tr>
+<tr>
+<td><code>58</code></td>
+<td>Text</td>
+<td>when it applies</td>
+</tr>
+</tbody>
+</table>
+<h3 id="fix-44">FIX 4.4</h3>
+<p>BeginString <code>FIX.4.4</code>, 20 body fields at most.</p>
+<table>
+<thead>
+<tr>
+<th>tag</th>
+<th>name</th>
+<th>sent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>37</code></td>
+<td>OrderID</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>11</code></td>
+<td>ClOrdID</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>41</code></td>
+<td>OrigClOrdID</td>
+<td>when it applies</td>
+</tr>
+<tr>
+<td><code>17</code></td>
+<td>ExecID</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>150</code></td>
+<td>ExecType</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>39</code></td>
+<td>OrdStatus</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td>Account</td>
+<td>when it applies</td>
+</tr>
+<tr>
+<td><code>55</code></td>
+<td>Symbol</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>54</code></td>
+<td>Side</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>38</code></td>
+<td>OrderQty</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>40</code></td>
+<td>OrdType</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>44</code></td>
+<td>Price</td>
+<td>when it applies</td>
+</tr>
+<tr>
+<td><code>32</code></td>
+<td>LastQty</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>31</code></td>
+<td>LastPx</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>151</code></td>
+<td>LeavesQty</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>14</code></td>
+<td>CumQty</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>6</code></td>
+<td>AvgPx</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>60</code></td>
+<td>TransactTime</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>103</code></td>
+<td>OrdRejReason</td>
+<td>when it applies</td>
+</tr>
+<tr>
+<td><code>58</code></td>
+<td>Text</td>
+<td>when it applies</td>
+</tr>
+</tbody>
+</table>
+<h3 id="where-they-differ">Where they differ</h3>
+<table>
+<thead>
+<tr>
+<th>report</th>
+<th>FIX 4.2</th>
+<th>FIX 4.4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PARTIAL_FILL</td>
+<td><code>150=1</code></td>
+<td><code>150=F</code></td>
+</tr>
+<tr>
+<td>FILL</td>
+<td><code>150=2</code></td>
+<td><code>150=F</code></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>FIX 4.2</th>
+<th>FIX 4.4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ExecTransType (20)</td>
+<td>sent</td>
+<td>not sent</td>
+</tr>
+<tr>
+<td>required tags on <code>35=D</code></td>
+<td>11, 21, 55, 54, 60, 38, 40</td>
+<td>11, 55, 54, 60, 38, 40</td>
+</tr>
+<tr>
+<td>required tags on <code>35=F</code></td>
+<td>11, 41, 55, 54, 60</td>
+<td>11, 41, 55, 54, 60</td>
+</tr>
+<tr>
+<td>required tags on <code>35=G</code></td>
+<td>11, 41, 21, 55, 54, 60, 38, 40</td>
+<td>11, 41, 55, 54, 60, 38, 40</td>
+</tr>
+</tbody>
+</table>
+<p>Beyond the ExecutionReport body:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>FIX 4.2</th>
+<th>FIX 4.4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Side values</td>
+<td>1–9</td>
+<td>1–9 and A–G</td>
+</tr>
+<tr>
+<td>OrdType values</td>
+<td>1–9, A–I, P</td>
+<td>1–9, A–I, J–M, P</td>
+</tr>
+<tr>
+<td>TimeInForce values</td>
+<td>0–6</td>
+<td>0–7 (adds At the Close)</td>
+</tr>
+<tr>
+<td>HandlInst (21) on D and G</td>
+<td>required</td>
+<td>optional</td>
+</tr>
+</tbody>
+</table>
+<p>The reject codes also differ; they are on
+<a href="order-behavior.html#reject-codes">Order behavior</a>.</p>
+<p>Everything else — the ack, cancel, replace and pending ExecTypes, every other
+field, and the whole session layer — is identical in both.</p>
+<div class="callout note">
+<p><span class="label">Pinned</span>
+The 4.2 and 4.4 renderings are held by golden fixtures under <code>tests/golden/</code>,
+captured before the refactors that could have changed them and compared
+byte-for-byte on every test run. If a change alters what goes on the wire, the
+suite says so.</p>
+</div>
+<div class="footer">
+OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+from the code by <code>orderecho_BuildDocs.py</code>.
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  var wrap = document.createElement("div");
+  wrap.className = "codeblock";
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  var button = document.createElement("button");
+  button.className = "copy";
+  button.type = "button";
+  button.textContent = "Copy";
+  button.addEventListener("click", function () {
+    var text = pre.innerText;
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(area);
+  });
+  wrap.appendChild(button);
+});
+</script>
+</body>
+</html>

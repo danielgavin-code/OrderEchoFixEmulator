@@ -1,0 +1,31 @@
+# missing required tag 11
+REJECT ref_seq=2 ref_tag=11 reason=1 text=Required tag missing: 11
+# missing required tag 21
+SEND 8 37=O-GOLDEN-1|11=S21|17=E-GOLDEN-1|150=0|39=0|55=AAPL|54=1|38=1000|40=1|32=0|31=0.00|151=1000|14=0|6=0.0000|60=<TRANSACT_TIME>
+PRICE_REQUEST O-GOLDEN-1 AAPL
+# missing required tag 55
+REJECT ref_seq=4 ref_tag=55 reason=1 text=Required tag missing: 55
+# missing required tag 54
+REJECT ref_seq=5 ref_tag=54 reason=1 text=Required tag missing: 54
+# missing required tag 60
+REJECT ref_seq=6 ref_tag=60 reason=1 text=Required tag missing: 60
+# missing required tag 38
+REJECT ref_seq=7 ref_tag=38 reason=1 text=Required tag missing: 38
+# missing required tag 40
+REJECT ref_seq=8 ref_tag=40 reason=1 text=Required tag missing: 40
+# limit order without a price
+REJECT ref_seq=9 ref_tag=44 reason=1 text=Required tag missing: 44
+# quantity not a number
+REJECT ref_seq=10 ref_tag=38 reason=6 text=OrderQty is not a number: many
+# price not a number
+REJECT ref_seq=11 ref_tag=44 reason=6 text=Price is not a number: cheap
+# TransactTime unparseable
+REJECT ref_seq=12 ref_tag=60 reason=6 text=TransactTime is not a UTC timestamp: yesterday
+# side not a FIX value
+REJECT ref_seq=13 ref_tag=54 reason=5 text=Side not a FIX 4.4 value: X
+# ordtype not a FIX value
+REJECT ref_seq=14 ref_tag=40 reason=5 text=OrdType not a FIX 4.4 value: Z
+# handlinst not a FIX value
+REJECT ref_seq=15 ref_tag=21 reason=5 text=HandlInst not a FIX 4.4 value: 9
+# cancel missing its OrigClOrdID
+REJECT ref_seq=16 ref_tag=41 reason=1 text=Required tag missing: 41
