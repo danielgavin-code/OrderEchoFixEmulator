@@ -40,6 +40,7 @@ TAG_REF_SEQ_NUM = 45
 TAG_SIDE = 54
 TAG_SYMBOL = 55
 TAG_TEXT = 58
+TAG_SENDER_COMP_ID = 49
 TAG_EXEC_TYPE = 150
 TAG_LEAVES_QTY = 151
 
@@ -245,6 +246,16 @@ def build_chain(messages, cl_ord_id: str | None = None,
     _add_session_rejects(messages, chosen)
 
     ordered = [chosen[index] for index in sorted(chosen)]
+    kept, split = _split_duplicates(ordered, order_id)
+    if split:
+        ordered = kept
+        wanted_ids = {cl_ord_id} if cl_ord_id else set()
+        wanted_orders = {order_id} if order_id else set()
+        for message in ordered:
+            wanted_ids |= _identity_ids(message)
+            own_order = _order_id_of(message)
+            if own_order:
+                wanted_orders.add(own_order)
     steps = _mark_replays(ordered)
     chain = Chain(
         seed=cl_ord_id or order_id or "",
@@ -256,12 +267,33 @@ def build_chain(messages, cl_ord_id: str | None = None,
     return chain
 
 
+def sent_by_same_side(reject, request) -> bool:
+    """True when *reject* and *request* came from the same side.
+
+    A Reject can only answer a request the *other* side sent.  In one side's
+    log both directions share the RefSeqNum key space, so without this a
+    Reject we sent about the counterparty's message N would "answer" our own
+    request that happened to be sequence N as well.  SenderCompID decides
+    when both carry it; otherwise the log's direction does.
+    """
+    reject_sender = reject.get(TAG_SENDER_COMP_ID)
+    request_sender = request.get(TAG_SENDER_COMP_ID)
+    if reject_sender and request_sender:
+        return reject_sender == request_sender
+    directions = {getattr(reject, "direction", None),
+                  getattr(request, "direction", None)}
+    if directions <= {"in", "out"} and len(directions) == 1:
+        return True
+    return False
+
+
 def _add_session_rejects(messages, chosen: dict) -> None:
     """Pull in Rejects that answer a request already in the chain.
 
     A 35=3 or 35=j carries no ClOrdID, so nothing links it to an order except
     the sequence number it refers to -- but it is a perfectly good answer to a
-    request, and check 10 has to be able to see it.
+    request, and check 10 has to be able to see it.  Only a Reject from the
+    other side counts (sent_by_same_side).
     """
     wanted = {}
     for message in chosen.values():
@@ -277,9 +309,77 @@ def _add_session_rejects(messages, chosen: dict) -> None:
         ref_seq = _int(message.get(TAG_REF_SEQ_NUM))
         if ref_seq is None:
             continue
-        if (message.session, ref_seq) in wanted or \
-                (None, ref_seq) in wanted:
+        request = wanted.get((message.session, ref_seq)) or \
+            wanted.get((None, ref_seq))
+        if request is not None and not sent_by_same_side(message, request):
             chosen[index] = message
+
+
+def _split_duplicates(ordered: list, seed_order_id=None):
+    """Keep a reject that answers a *duplicate* request out of the chain.
+
+    A request that reuses a ClOrdID already in the chain is a different
+    order as far as the counterparty is concerned; its reject (39=8)
+    carries a different OrderID.  That reject, the duplicate request and any
+    Reject answering it form their own chain, so the original order's
+    verdict is not touched.  Asking for the duplicate's OrderID returns the
+    split-off chain; anything else returns the original.
+
+    Returns (messages, split?).
+    """
+    primary = None
+    for message in ordered:
+        if message.msg_type in (MSG_EXECUTION_REPORT, MSG_CANCEL_REJECT):
+            primary = _order_id_of(message)
+            if primary:
+                break
+    if not primary:
+        return ordered, False
+
+    used: dict = {}
+    duplicates = []
+    for message in ordered:
+        if message.msg_type not in REQUEST_TYPES or message.poss_dup:
+            continue
+        cl_ord_id = message.get(TAG_CL_ORD_ID)
+        if not cl_ord_id:
+            continue
+        if used.get(cl_ord_id):
+            duplicates.append(message)
+        used[cl_ord_id] = used.get(cl_ord_id, 0) + 1
+    if not duplicates:
+        return ordered, False
+
+    split: set = set()
+    split_orders: set = set()
+    for position, message in enumerate(ordered):
+        if message.msg_type != MSG_EXECUTION_REPORT or \
+                message.get(TAG_ORD_STATUS) != "8":
+            continue
+        own = _order_id_of(message)
+        if not own or own == primary:
+            continue
+        request = None
+        for duplicate in duplicates:
+            if duplicate.get(TAG_CL_ORD_ID) == message.get(TAG_CL_ORD_ID) \
+                    and ordered.index(duplicate) < position:
+                request = duplicate
+        if request is None:
+            continue
+        split.add(id(message))
+        split.add(id(request))
+        split_orders.add(own)
+        if request.seq is not None:
+            for other in ordered:
+                if other.msg_type in (MSG_REJECT, MSG_BUSINESS_REJECT) and \
+                        _int(other.get(TAG_REF_SEQ_NUM)) == request.seq and \
+                        not sent_by_same_side(other, request):
+                    split.add(id(other))
+    if not split:
+        return ordered, False
+    want_split = bool(seed_order_id) and seed_order_id in split_orders
+    return [message for message in ordered
+            if (id(message) in split) == want_split], True
 
 
 def _mark_replays(messages) -> list:
@@ -548,7 +648,7 @@ def check_requests_answered(chain: Chain) -> CheckResult:
                            "no order requests in this chain", rule)
 
     answered_ids = set()
-    referenced_seqs = set()
+    references = []                    # (RefSeqNum, the message carrying it)
     for message in chain.messages:
         if message.msg_type not in RESPONSE_TYPES:
             continue
@@ -558,14 +658,17 @@ def check_requests_answered(chain: Chain) -> CheckResult:
                 answered_ids.add(value)
         ref_seq = _int(message.get(TAG_REF_SEQ_NUM))
         if ref_seq is not None:
-            referenced_seqs.add(ref_seq)
+            references.append((ref_seq, message))
 
     unanswered = []
     for request in requests:
         cl_ord_id = request.get(TAG_CL_ORD_ID)
         if cl_ord_id and cl_ord_id in answered_ids:
             continue
-        if request.seq is not None and request.seq in referenced_seqs:
+        # A Reject only answers a request the other side sent.
+        if request.seq is not None and any(
+                ref_seq == request.seq and not sent_by_same_side(reply, request)
+                for ref_seq, reply in references):
             continue
         unanswered.append(request)
 

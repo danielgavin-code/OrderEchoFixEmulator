@@ -10,7 +10,7 @@
 <div class="shell">
 <aside class="sidebar">
 <a class="brand" href="index.html">OrderEchoFixEmulator</a>
-<span class="version">0.8.0 (cook8)</span>
+<span class="version">0.9.0 (cook9)</span>
 <nav aria-label="Guide">
 <ol>
 <li><a href="index.html">Overview</a></li>
@@ -240,7 +240,7 @@ the engine renders with.</p>
 </tbody>
 </table>
 <h3 id="fix-44">FIX 4.4</h3>
-<p>BeginString <code>FIX.4.4</code>, 20 body fields at most.</p>
+<p>BeginString <code>FIX.4.4</code>, 21 body fields at most.</p>
 <table>
 <thead>
 <tr>
@@ -269,6 +269,11 @@ the engine renders with.</p>
 <td><code>17</code></td>
 <td>ExecID</td>
 <td>always</td>
+</tr>
+<tr>
+<td><code>790</code></td>
+<td>OrdStatusReqID</td>
+<td>when it applies</td>
 </tr>
 <tr>
 <td><code>150</code></td>
@@ -372,6 +377,11 @@ the engine renders with.</p>
 <td><code>150=2</code></td>
 <td><code>150=F</code></td>
 </tr>
+<tr>
+<td>STATUS</td>
+<td><code>150=</code></td>
+<td><code>150=I</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -402,6 +412,11 @@ the engine renders with.</p>
 <td>required tags on <code>35=G</code></td>
 <td>11, 41, 21, 55, 54, 60, 38, 40</td>
 <td>11, 41, 55, 54, 60, 38, 40</td>
+</tr>
+<tr>
+<td>required tags on <code>35=H</code></td>
+<td>11, 55, 54</td>
+<td>11, 55, 54</td>
 </tr>
 </tbody>
 </table>
@@ -449,7 +464,7 @@ byte-for-byte on every test run. If a change alters what goes on the wire, the
 suite says so.</p>
 </div>
 <div class="footer">
-OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+OrderEchoFixEmulator 0.9.0 (cook9). Reference tables on this page are generated
 from the code by <code>orderecho_BuildDocs.py</code>.
 </div>
 </main>

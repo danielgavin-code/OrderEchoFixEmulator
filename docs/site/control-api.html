@@ -10,7 +10,7 @@
 <div class="shell">
 <aside class="sidebar">
 <a class="brand" href="index.html">OrderEchoFixEmulator</a>
-<span class="version">0.8.0 (cook8)</span>
+<span class="version">0.9.0 (cook9)</span>
 <nav aria-label="Guide">
 <ol>
 <li><a href="index.html">Overview</a></li>
@@ -130,6 +130,21 @@ curl -sX POST localhost:8090/orders/O-20260927-093636-1/fill-rest # finish it by
 <pre><code class="language-sh">curl -sX POST localhost:8090/orders/O-20260927-093636-1/cancel \
      -H 'content-type: application/json' -d '{&quot;text&quot;: &quot;pulled by hand&quot;}'
 </code></pre>
+<p><strong>Lifecycle states, as a venue would send them:</strong></p>
+<pre><code class="language-sh">curl -sX POST localhost:8090/orders/O-20260927-093636-1/done-for-day  # 150=3 39=3
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/expire        # 150=C 39=C
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/lock          # cancels now get 102=0
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/unlock
+</code></pre>
+<p>Like the other order routes, these check the order first: an unknown order is
+<code>404</code>, a closed one <code>409</code>, whether or not a session is logged on.</p>
+<p><strong>Restart the engine without stopping the process:</strong></p>
+<pre><code class="language-sh">curl -sX POST localhost:8090/admin/restart
+</code></pre>
+<p>Every live session is logged out, the listeners stop, the config and every
+session's state are reloaded from disk — open orders too, with
+<code>orders.persist</code> — and the listeners start again on the same ports. The call
+returns once they are back, with how many open orders each session has.</p>
 <p><strong>Drive the session:</strong></p>
 <pre><code class="language-sh">curl -sX POST localhost:8090/sessions/agent42/test-request
 curl -sX POST localhost:8090/sessions/agent42/logout \
@@ -191,6 +206,13 @@ served. A <code>?</code> after a body field means it is optional.</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>/admin/restart</code></td>
+<td>Restart the engine inside this process: log every session out,</td>
+<td></td>
+<td>200</td>
+</tr>
 <tr>
 <td><code>GET</code></td>
 <td><code>/health</code></td>
@@ -263,6 +285,20 @@ served. A <code>?</code> after a body field means it is optional.</p>
 </tr>
 <tr>
 <td><code>POST</code></td>
+<td><code>/orders/{order_id}/done-for-day</code></td>
+<td>End the order's trading day: 150=3 39=3, LeavesQty 0, closed.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/orders/{order_id}/expire</code></td>
+<td>Expire an open order by hand: 150=C 39=C, LeavesQty 0, closed.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
 <td><code>/orders/{order_id}/fill</code></td>
 <td>Fill part of a working order, at a price you choose.</td>
 <td><code>qty</code>, <code>price</code>?</td>
@@ -283,9 +319,23 @@ served. A <code>?</code> after a body field means it is optional.</p>
 <td>200, 422</td>
 </tr>
 <tr>
+<td><code>POST</code></td>
+<td><code>/orders/{order_id}/lock</code></td>
+<td>Put the order in "fill in progress": a cancel or replace now gets</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
 <td><code>GET</code></td>
 <td><code>/orders/{order_id}/timeline</code></td>
 <td>One order's whole life plus the timeline checks, as JSON.</td>
+<td></td>
+<td>200, 422</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/orders/{order_id}/unlock</code></td>
+<td>Take the order out of "fill in progress".</td>
 <td></td>
 <td>200, 422</td>
 </tr>
@@ -467,7 +517,7 @@ served. A <code>?</code> after a body field means it is optional.</p>
 </tbody>
 </table>
 <div class="footer">
-OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+OrderEchoFixEmulator 0.9.0 (cook9). Reference tables on this page are generated
 from the code by <code>orderecho_BuildDocs.py</code>.
 </div>
 </main>

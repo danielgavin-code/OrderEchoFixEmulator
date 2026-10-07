@@ -41,6 +41,7 @@ STORAGE_KEYS = (
     ("storage", "seqnum_dir"),
     ("storage", "evidence_dir"),
     ("storage", "msgstore_dir"),
+    ("storage", "orders_dir"),
     ("logging", "log_dir"),
 )
 
@@ -74,6 +75,7 @@ def isolated_config(tmp_path, *, fix_version="FIX.4.2", fix_port=0,
             seqnum_dir=os.path.join(root, "data", "seqnums"),
             evidence_dir=os.path.join(root, "data", "evidence"),
             msgstore_dir=os.path.join(root, "data", "msgstore"),
+            orders_dir=os.path.join(root, "data", "orders"),
         ),
         logging=LoggingConfig(
             log_dir=os.path.join(root, "logs"), fix_delimiter="|",
@@ -138,6 +140,97 @@ def describe_changes(before: dict, after: dict) -> list:
     for path in sorted(set(before) - set(after)):
         changes.append(f"deleted {os.path.relpath(path, REPO_ROOT)}")
     return changes
+
+
+def _is_emulator(command: str) -> bool:
+    """A Python process running orderecho_Main.py -- not merely a shell
+    whose command line mentions it."""
+    tokens = command.split()
+    if not tokens or "python" not in os.path.basename(tokens[0]).lower():
+        return False
+    return any(os.path.basename(token) == "orderecho_Main.py"
+               for token in tokens[1:])
+
+
+def find_repo_writers(dirs=PROTECTED_DIRS, repo_root=REPO_ROOT,
+                      exclude_pids=None) -> list:
+    """Other processes writing to *dirs*: sorted (pid, command) pairs.
+
+    Two ways to be found: holding a file open under one of *dirs* (a running
+    engine keeps its FIX log and evidence file open), or being an emulator
+    (orderecho_Main.py) whose working directory is *repo_root* (started from
+    the repo with the default, relative storage paths).  Best effort:
+    without `lsof` and `ps` this finds nothing, and the caller falls back to
+    the generic message.
+    """
+    import subprocess
+
+    exclude = {os.getpid()} | set(exclude_pids or ())
+
+    def run(args):
+        try:
+            return subprocess.run(args, capture_output=True, text=True,
+                                  timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    commands = {}
+    for line in run(["ps", "-ax", "-o", "pid=,command="]).splitlines():
+        pid_text, _sep, command = line.strip().partition(" ")
+        if pid_text.isdigit():
+            commands[int(pid_text)] = command.strip()
+
+    pids = set()
+    existing = [d for d in dirs if os.path.isdir(d)]
+    if existing:
+        args = ["lsof", "-n", "-P", "-F", "p"]
+        for directory in existing:
+            args += ["+D", directory]
+        pids |= {int(line[1:]) for line in run(args).splitlines()
+                 if line.startswith("p") and line[1:].isdigit()}
+
+    root = os.path.realpath(repo_root)
+    for pid, command in commands.items():
+        if not _is_emulator(command):
+            continue
+        cwd = None
+        if os.path.isdir(f"/proc/{pid}"):
+            try:
+                cwd = os.readlink(f"/proc/{pid}/cwd")
+            except OSError:
+                cwd = None
+        else:
+            for out in run(["lsof", "-n", "-P", "-a", "-p", str(pid),
+                            "-d", "cwd", "-F", "n"]).splitlines():
+                if out.startswith("n"):
+                    cwd = out[1:]
+        if cwd and os.path.realpath(cwd) == root:
+            pids.add(pid)
+
+    return sorted((pid, commands.get(pid, "?")) for pid in pids - exclude)
+
+
+def guard_failure_message(changes: list, writers: list) -> str:
+    """What the repo guard says when data/ or logs/ changed during a run."""
+    listed = "\n  ".join(changes)
+    if writers:
+        lines = []
+        for pid, command in writers:
+            if _is_emulator(command):
+                lines.append(f"a running emulator, pid {pid}, is writing to "
+                             f"repo data/logs; stop it before running tests")
+            else:
+                lines.append(f"a running process, pid {pid}, has files open "
+                             f"in repo data/logs; stop it before running "
+                             f"tests")
+            lines.append(f"    ({command})")
+        return ("\n".join(lines)
+                + "\nThese changes are most likely its doing, not a test's:"
+                + f"\n  {listed}")
+    return ("tests wrote to the repo's own runtime directories:\n  "
+            f"{listed}\n"
+            "Build the config with tests/isolation.isolated_config so every "
+            "storage path lives under tmp_path (spec 3.5).")
 
 
 def isolated_multi_config(tmp_path, sessions, *, api_port=0,

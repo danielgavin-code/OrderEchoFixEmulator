@@ -54,6 +54,22 @@ Each session keeps an inbound expectation and an outbound counter in
 Resetting: a Logon with `141=Y`, `--reset-seqnums` at startup, or
 `POST /sessions/{id}/reset-seqnums`.
 
+### The gap queue
+
+With `gap_queue: true` (per session, or under `defaults:`; on in
+`config/orderecho_multi.yaml`) a gap is handled the way the OrderEcho agent
+handles one:
+
+- the ResendRequest asks for exactly the missing range,
+  `7=<expected> 16=<received - 1>`, instead of `16=0`;
+- the message that revealed the gap, and every later one, is **held** rather
+  than dropped, and processed in sequence order once the range is filled — so
+  a TestRequest behind a gap is answered after the fill;
+- if a hole remains before what is held, another ResendRequest asks for it;
+- a Logon that revealed the gap is processed at once, and its sequence number
+  is consumed after the fill;
+- at most 1000 messages are held; one more is a Logout and a disconnect.
+
 ## ResendRequest
 
 By default a ResendRequest is answered by replaying **the actual messages that
@@ -97,7 +113,7 @@ things here:
 | | When | Carries |
 |---|---|---|
 | **Session Reject** `35=3` | The message is malformed as FIX — a required tag missing, a value we cannot use, a CompID problem | `45` RefSeqNum, `373` SessionRejectReason, `58` |
-| **Business Reject** `35=j` | The message is well-formed but is a type we do not handle | `45`, `380=3` unsupported message type |
+| **Business Reject** `35=j` | The message is well-formed but is a type we do not handle | `45`, `372`, `380=3` unsupported message type, and with `business_reject_ref_id: true` `379` |
 | **ExecutionReport reject** `35=8 39=8` | The order itself is refused — a rule, a price band, a bad quantity | `103` OrdRejReason, `58` |
 | **OrderCancelReject** `35=9` | A cancel or replace is refused | `434` what it answers, `102` why |
 
@@ -112,6 +128,12 @@ The session-level reason codes in use:
 
 A message with no usable MsgSeqNum cannot be sequenced at all, so it is
 rejected with `373=1` and the session carries on.
+
+With `business_reject_ref_id: true` (on in `config/orderecho_multi.yaml`) a
+`35=j` carries `379` BusinessRejectRefID whenever the rejected message had a
+business-level ID — ClOrdID first, then the other IDs FIX lists (QuoteID,
+MDReqID, ...) — and leaves it out when there was none, as FIX requires.
+`35=H` is a business reject too, unless `orders.status_requests` is on.
 
 ## Logout
 

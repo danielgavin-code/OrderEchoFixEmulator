@@ -10,7 +10,7 @@
 <div class="shell">
 <aside class="sidebar">
 <a class="brand" href="index.html">OrderEchoFixEmulator</a>
-<span class="version">0.8.0 (cook8)</span>
+<span class="version">0.9.0 (cook9)</span>
 <nav aria-label="Guide">
 <ol>
 <li><a href="index.html">Overview</a></li>
@@ -122,6 +122,17 @@ an order nobody intended.</p>
 <code>control_api</code>, <code>pricing</code> — belongs to the engine and is shared by every session.
 Pricing and its cache are engine-wide on purpose: two sessions asking about the
 same symbol should not disagree.</p>
+<h2 id="certification-behaviours">Certification behaviours</h2>
+<p>Several keys switch on what a full certification run needs: other
+TimeInForce values, Pending New, account checks, status requests, open orders
+across restarts, the gap queue and <code>379</code> on a business reject. Each is off by
+default — <code>config/orderecho.yaml</code> answers exactly as before — and all are on
+in <code>config/orderecho_multi.yaml</code>. See
+<a href="order-behavior.html#certification-behaviours">Order behavior</a> and
+<a href="session-protocol.html#the-gap-queue">Session protocol</a>.</p>
+<p><code>pricing.negative_cache_seconds</code> (default 300) is on everywhere: a live price
+lookup that fails is not retried for that long, so only the first order for an
+unpriceable symbol waits for the timeout.</p>
 <h2 id="full-key-reference">Full key reference</h2>
 <p>Generated from the config schema in <code>orderecho_Config.py</code>, so it cannot drift
 from what the loader actually reads.</p>
@@ -223,6 +234,18 @@ from what the loader actually reads.</p>
 <td><code>replay</code></td>
 <td>one of <code>replay</code>, <code>gapfill</code>; replay the real messages, or gap-fill them</td>
 </tr>
+<tr>
+<td><code>gap_queue</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>on a gap, ask for exactly the missing range and hold early messages until it is filled</td>
+</tr>
+<tr>
+<td><code>business_reject_ref_id</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>put 379 BusinessRejectRefID on a 35=j when the rejected message had an ID</td>
+</tr>
 </tbody>
 </table>
 <h3 id="sessions"><code>sessions[]</code></h3>
@@ -280,6 +303,18 @@ from what the loader actually reads.</p>
 <td>one of <code>replay</code>, <code>gapfill</code>; replay the real messages, or gap-fill them</td>
 </tr>
 <tr>
+<td><code>gap_queue</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>on a gap, ask for exactly the missing range and hold early messages until it is filled</td>
+</tr>
+<tr>
+<td><code>business_reject_ref_id</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>put 379 BusinessRejectRefID on a 35=j when the rejected message had an ID</td>
+</tr>
+<tr>
 <td><code>host</code></td>
 <td><code>str</code></td>
 <td><code>engine.host</code></td>
@@ -324,6 +359,18 @@ from what the loader actually reads.</p>
 <td><code>replay</code></td>
 <td>one of <code>replay</code>, <code>gapfill</code></td>
 </tr>
+<tr>
+<td><code>gap_queue</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>business_reject_ref_id</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <p>Nested sections: <code>orders</code>, <code>price_band</code>, <code>rules</code>.</p>
@@ -356,6 +403,12 @@ from what the loader actually reads.</p>
 <td><code>str</code></td>
 <td><code>data/msgstore</code></td>
 <td>outbound messages, for a real resend</td>
+</tr>
+<tr>
+<td><code>orders_dir</code></td>
+<td><code>str</code></td>
+<td><code>data/orders</code></td>
+<td>open orders, when orders.persist is on</td>
 </tr>
 </tbody>
 </table>
@@ -427,6 +480,42 @@ from what the loader actually reads.</p>
 <td><code>current</code></td>
 <td>one of <code>current</code>, <code>replaced</code></td>
 </tr>
+<tr>
+<td><code>send_pending_new</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>send 150=A before the 150=0 ack</td>
+</tr>
+<tr>
+<td><code>valid_accounts</code></td>
+<td><code>list</code></td>
+<td><code>[]</code></td>
+<td>empty = no Account check; else tag 1, when present, must be one of these</td>
+</tr>
+<tr>
+<td><code>persist</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>keep open orders across restarts (storage.orders_dir)</td>
+</tr>
+<tr>
+<td><code>time_in_force</code></td>
+<td><code>list</code></td>
+<td><code>[day]</code></td>
+<td>TimeInForce values accepted, by name: day, gtc, ioc, fok, gtx, gtd</td>
+</tr>
+<tr>
+<td><code>status_requests</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>answer OrderStatusRequest (35=H) instead of a 35=j</td>
+</tr>
+<tr>
+<td><code>ioc_fok_ack</code></td>
+<td><code>bool</code></td>
+<td><code>true</code></td>
+<td>send the 150=0 ack before an IOC or FOK order's fill, cancel or kill; off: the outcome comes first</td>
+</tr>
 </tbody>
 </table>
 <h3 id="pricing"><code>pricing</code></h3>
@@ -482,6 +571,12 @@ from what the loader actually reads.</p>
 <td><code>list</code></td>
 <td><code>[AAPL, MSFT, SPY]</code></td>
 <td>fetched once at startup</td>
+</tr>
+<tr>
+<td><code>negative_cache_seconds</code></td>
+<td><code>float</code></td>
+<td><code>300.0</code></td>
+<td>how long a failed live lookup is remembered</td>
 </tr>
 </tbody>
 </table>
@@ -640,7 +735,7 @@ from what the loader actually reads.</p>
 directories are created at startup. <code>data/</code> and <code>logs/</code> are gitignored. See
 <a href="evidence-logs.html">Evidence &amp; logs</a> for what ends up in them.</p>
 <div class="footer">
-OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+OrderEchoFixEmulator 0.9.0 (cook9). Reference tables on this page are generated
 from the code by <code>orderecho_BuildDocs.py</code>.
 </div>
 </main>

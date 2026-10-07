@@ -29,6 +29,12 @@ class ReportKind(str, Enum):
     PENDING_CANCEL = "PENDING_CANCEL"
     PENDING_REPLACE = "PENDING_REPLACE"
     REJECTED = "REJECTED"
+    # Lifecycle states, TIF, persistence
+    PENDING_NEW = "PENDING_NEW"
+    DONE_FOR_DAY = "DONE_FOR_DAY"
+    EXPIRED = "EXPIRED"
+    #: The answer to an OrderStatusRequest (35=H): not an event, a snapshot.
+    STATUS = "STATUS"
 
 
 class Reason(str, Enum):
@@ -41,6 +47,7 @@ class Reason(str, Enum):
     BAND_BREACH = "BAND_BREACH"
     NO_REFERENCE = "NO_REFERENCE"
     RULE_REJECT = "RULE_REJECT"
+    UNKNOWN_ACCOUNT = "UNKNOWN_ACCOUNT"       # : orders.valid_accounts
     # Cancel / replace rejects
     CXL_TOO_LATE = "CXL_TOO_LATE"
     CXL_UNKNOWN_ORDER = "CXL_UNKNOWN_ORDER"
@@ -80,6 +87,8 @@ class ExecReport:
     reason: Reason | None = None
     reason_code: str | None = None      # a rule's own code wins when set
     text: str | None = None
+    #: OrdStatusReqID (790) echoed on a status answer, 4.4 only.
+    ord_status_req_id: str | None = None
 
 
 @dataclass
@@ -115,6 +124,10 @@ TAG_SIDE = 54
 TAG_SYMBOL = 55
 TAG_TEXT = 58
 TAG_TRANSACT_TIME = 60
+TAG_TIME_IN_FORCE = 59
+TAG_EXPIRE_TIME = 126
+TAG_EXPIRE_DATE = 432
+TAG_ORD_STATUS_REQ_ID = 790
 TAG_CXL_REJ_REASON = 102
 TAG_ORD_REJ_REASON = 103
 TAG_EXEC_TYPE = 150
@@ -152,13 +165,21 @@ class FixVersionProfile:
     cancel_reject_reasons: dict
     include_exec_trans_type: bool = True
     handl_insts: frozenset = field(default=HANDL_INSTS)
+    #: ExecType for an OrderStatusRequest answer; None = repeat OrdStatus (4.2).
+    status_exec_type: str | None = None
 
     # ------------------------------------------------------------ queries
 
     def required_for(self, msg_type: str) -> tuple:
         return self.required_tags.get(msg_type, ())
 
-    def exec_type_for(self, kind: ReportKind) -> str:
+    def exec_type_for(self, kind: ReportKind, ord_status: str = "") -> str:
+        if kind is ReportKind.STATUS and self.status_exec_type is None:
+            # 4.2 has no ExecType of its own for a status answer: ExecType
+            # repeats the order's current status (and 20=3 says why).
+            return ord_status
+        if kind is ReportKind.STATUS:
+            return self.status_exec_type
         return self.exec_types[kind]
 
     def reject_code_for(self, reason: Reason | None,
@@ -184,10 +205,14 @@ class FixVersionProfile:
             body.append((TAG_ORIG_CL_ORD_ID, report.orig_cl_ord_id))
         body.append((TAG_EXEC_ID, report.exec_id))
         if self.include_exec_trans_type:
-            # 4.2 only: ExecTransType was dropped in 4.4.
-            body.append((TAG_EXEC_TRANS_TYPE, "0"))
+            # 4.2 only: ExecTransType was dropped in 4.4.  A status answer
+            # is 20=3 (Status), every other report 20=0 (New).
+            body.append((TAG_EXEC_TRANS_TYPE,
+                         "3" if report.kind is ReportKind.STATUS else "0"))
+        if report.ord_status_req_id and not self.include_exec_trans_type:
+            body.append((TAG_ORD_STATUS_REQ_ID, report.ord_status_req_id))
         body.extend([
-            (TAG_EXEC_TYPE, self.exec_type_for(report.kind)),
+            (TAG_EXEC_TYPE, self.exec_type_for(report.kind, report.ord_status)),
             (TAG_ORD_STATUS, report.ord_status),
         ])
         if report.account:
@@ -196,8 +221,10 @@ class FixVersionProfile:
             (TAG_SYMBOL, report.symbol),
             (TAG_SIDE, report.side),
             (TAG_ORDER_QTY, report.order_qty),
-            (TAG_ORD_TYPE, report.ord_type),
         ])
+        if report.ord_type is not None:
+            # Only a status answer about an unknown order can lack it.
+            body.append((TAG_ORD_TYPE, report.ord_type))
         if report.price is not None:
             body.append((TAG_PRICE, report.price))
         body.extend([
@@ -235,6 +262,7 @@ _FIX42_REQUIRED = {
     "D": (11, 21, 55, 54, 60, 38, 40),
     "F": (11, 41, 55, 54, 60),
     "G": (11, 41, 21, 55, 54, 60, 38, 40),
+    "H": (11, 55, 54),
 }
 
 # HandlInst (21) became optional in 4.4.
@@ -242,6 +270,7 @@ _FIX44_REQUIRED = {
     "D": (11, 55, 54, 60, 38, 40),
     "F": (11, 41, 55, 54, 60),
     "G": (11, 41, 55, 54, 60, 38, 40),
+    "H": (11, 55, 54),
 }
 
 _FIX42_EXEC_TYPES = {
@@ -253,6 +282,9 @@ _FIX42_EXEC_TYPES = {
     ReportKind.PENDING_CANCEL: "6",
     ReportKind.PENDING_REPLACE: "E",
     ReportKind.REJECTED: "8",
+    ReportKind.PENDING_NEW: "A",
+    ReportKind.DONE_FOR_DAY: "3",
+    ReportKind.EXPIRED: "C",
 }
 
 # 4.4 folded both fill kinds into Trade; OrdStatus tells them apart.
@@ -268,6 +300,7 @@ _FIX42_REJECT_REASONS = {
     Reason.BAND_BREACH: "3",
     Reason.NO_REFERENCE: "0",
     Reason.RULE_REJECT: "0",
+    Reason.UNKNOWN_ACCOUNT: "0",               # Broker option: 4.2 has no code
 }
 
 _FIX44_REJECT_REASONS = {
@@ -278,6 +311,7 @@ _FIX44_REJECT_REASONS = {
     Reason.BAND_BREACH: "3",
     Reason.NO_REFERENCE: "99",                 # Other
     Reason.RULE_REJECT: "0",
+    Reason.UNKNOWN_ACCOUNT: "15",              # Unknown account(s)
 }
 
 _FIX42_CANCEL_REASONS = {
@@ -329,6 +363,7 @@ FIX44 = FixVersionProfile(
     reject_reasons=_FIX44_REJECT_REASONS,
     cancel_reject_reasons=_FIX44_CANCEL_REASONS,
     include_exec_trans_type=False,
+    status_exec_type="I",                      # Order Status
 )
 
 PROFILES = {FIX_4_2: FIX42, FIX_4_4: FIX44}

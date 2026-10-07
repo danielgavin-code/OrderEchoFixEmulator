@@ -268,8 +268,8 @@ async def test_health_and_status_report_version_build_and_fix_version(tmp_path):
         health = (await http.get("/health")).json()
         assert health == {"ok": True, "version": ORDERECHO_VERSION,
                           "build": ORDERECHO_BUILD, "sessions": 1}
-        assert health["version"] == "0.8.0"
-        assert health["build"] == "cook8"
+        assert health["version"] == "0.9.0"
+        assert health["build"] == "cook9"
 
         status = (await http.get("/status")).json()
         assert status["fix_version"] == FIX_4_4
@@ -288,8 +288,8 @@ def test_only_one_module_names_the_build():
             continue
         text = path.read_text(encoding="utf-8")
         for needle in ("cook3", "cook4", "cook5", "cook6", "cook7",
-                       "cook8", "Cook 4", "Cook 5", "Cook 6", "Cook 7",
-                       "Cook 8"):
+                       "cook8", "cook9", "Cook 4", "Cook 5", "Cook 6",
+                       "Cook 7", "Cook 8", "Cook 9"):
             if needle in text:
                 offenders.append(f"{path.name}: {needle}")
     assert offenders == [], offenders

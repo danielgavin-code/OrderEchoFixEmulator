@@ -43,6 +43,12 @@ class SessionConfig:
     heartbeat_grace_pct: float
     logout_timeout_sec: float
     resend_mode: str = "replay"
+    #: : on an inbound gap, ask for exactly the missing range and hold
+    #: the messages that arrived early, processing them once it is filled.
+    gap_queue: bool = False
+    #: : a BusinessMessageReject carries 379 BusinessRejectRefID when
+    #: the rejected message had a business-level ID.
+    business_reject_ref_id: bool = False
 
     @property
     def name(self) -> str:
@@ -55,6 +61,8 @@ class StorageConfig:
     seqnum_dir: str
     evidence_dir: str
     msgstore_dir: str = "data/msgstore"
+    #: : open orders, one JSONL file per session (orders.persist).
+    orders_dir: str = "data/orders"
 
 
 @dataclass
@@ -70,6 +78,13 @@ class OrdersConfig:
     default_delay_ms: int = 500
     send_pending_acks: bool = False
     replace_ack_ordstatus: str = "current"
+    # every one of these defaults to the earlier behaviour.
+    send_pending_new: bool = False
+    valid_accounts: list = field(default_factory=list)
+    persist: bool = False
+    time_in_force: list = field(default_factory=lambda: ["day"])
+    status_requests: bool = False
+    ioc_fok_ack: bool = True        # 150=0 before an IOC/FOK's outcome
 
 
 @dataclass
@@ -83,6 +98,9 @@ class PricingConfig:
     warm_symbols: list = field(
         default_factory=lambda: ["AAPL", "MSFT", "SPY"]
     )
+    #: : a failed live lookup is remembered this long, so only the first
+    #: order for an unpriceable symbol waits for the timeout.
+    negative_cache_seconds: float = 300.0
 
 
 @dataclass
@@ -219,6 +237,10 @@ _VALID_REPLACE_ACK = ("current", "replaced")
 _VALID_RESEND_MODES = ("replay", "gapfill")
 _VALID_BAND_MODES = ("aggressive", "both")
 _VALID_NO_REFERENCE = ("skip", "reject")
+#: TimeInForce names the orders.time_in_force list may hold .
+TIF_NAMES = {"day": "0", "gtc": "1", "ioc": "3", "fok": "4", "gtx": "5",
+             "gtd": "6"}
+_VALID_TIF = tuple(TIF_NAMES)
 
 
 def _section(raw: dict, name: str) -> dict:
@@ -357,6 +379,9 @@ def load_config(path: str) -> Config:
                 f"{', '.join(_VALID_RESEND_MODES)}, got {resend_mode!r}"
             )
         session.resend_mode = resend_mode
+    for key in ("gap_queue", "business_reject_ref_id"):
+        if key in session_raw:
+            setattr(session, key, _require_bool(session_raw, "session", key))
 
     storage = StorageConfig(
         seqnum_dir=_require_str(storage_raw, "storage", "seqnum_dir"),
@@ -365,6 +390,9 @@ def load_config(path: str) -> Config:
     if "msgstore_dir" in storage_raw:
         storage.msgstore_dir = _require_str(storage_raw, "storage",
                                             "msgstore_dir")
+    if "orders_dir" in storage_raw:
+        storage.orders_dir = _require_str(storage_raw, "storage",
+                                          "orders_dir")
 
     delimiter = _require_str(logging_raw, "logging", "fix_delimiter")
     if delimiter not in ("|", "SOH"):
@@ -541,6 +569,10 @@ def _load_sessions(raw: dict, control_api: ControlApiConfig):
                     f"got {resend_mode!r}"
                 )
             session_config.resend_mode = resend_mode
+        for key in ("gap_queue", "business_reject_ref_id"):
+            source = entry if key in entry else defaults
+            if key in source:
+                setattr(session_config, key, _require_bool(source, where, key))
 
         try:
             orders = _load_orders(
@@ -698,6 +730,40 @@ def _load_orders(section: dict) -> OrdersConfig:
                 f"{', '.join(_VALID_REPLACE_ACK)}, got {value!r}"
             )
         orders.replace_ack_ordstatus = value
+    for key in ("send_pending_new", "persist", "status_requests",
+                "ioc_fok_ack"):
+        if key in section:
+            setattr(orders, key, _require_bool(section, "orders", key))
+    if "valid_accounts" in section:
+        raw = section["valid_accounts"]
+        if raw is None:
+            raw = []
+        if not isinstance(raw, list) or not all(
+                isinstance(entry, (str, int)) and not isinstance(entry, bool)
+                and str(entry).strip() for entry in raw):
+            raise ConfigError(
+                "config: 'orders.valid_accounts' must be a list of account "
+                f"names, got {raw!r}"
+            )
+        orders.valid_accounts = [str(entry).strip() for entry in raw]
+    if "time_in_force" in section:
+        raw = section["time_in_force"]
+        if not isinstance(raw, list) or not raw:
+            raise ConfigError(
+                "config: 'orders.time_in_force' must be a non-empty list of "
+                f"{', '.join(_VALID_TIF)}, got {raw!r}"
+            )
+        names = []
+        for entry in raw:
+            name = str(entry).strip().lower()
+            if name not in TIF_NAMES:
+                raise ConfigError(
+                    "config: 'orders.time_in_force' entries must be one of "
+                    f"{', '.join(_VALID_TIF)}, got {entry!r}"
+                )
+            if name not in names:
+                names.append(name)
+        orders.time_in_force = names
     return orders
 
 
@@ -726,6 +792,10 @@ def _load_pricing(section: dict) -> PricingConfig:
     if "timeout_sec" in section:
         pricing.timeout_sec = _require_number(
             section, "pricing", "timeout_sec", minimum=0
+        )
+    if "negative_cache_seconds" in section:
+        pricing.negative_cache_seconds = _require_number(
+            section, "pricing", "negative_cache_seconds", minimum=0
         )
 
     warm_raw = section.get("warm_symbols")
@@ -855,6 +925,10 @@ _SESSION_KEYS = _schema_keys(
         "heartbeat_grace_pct": "how much longer than HeartBtInt we wait",
         "logout_timeout_sec": "how long we wait for a Logout reply",
         "resend_mode": "replay the real messages, or gap-fill them",
+        "gap_queue": "on a gap, ask for exactly the missing range and hold "
+                     "early messages until it is filled",
+        "business_reject_ref_id": "put 379 BusinessRejectRefID on a 35=j "
+                                  "when the rejected message had an ID",
     },
 )
 
@@ -895,7 +969,8 @@ CONFIG_SCHEMA = (
         "wholesale.",
         _schema_keys(SessionConfig,
                      only=("heartbeat_grace_pct", "logout_timeout_sec",
-                           "resend_mode"),
+                           "resend_mode", "gap_queue",
+                           "business_reject_ref_id"),
                      choices={"resend_mode": _VALID_RESEND_MODES}),
         nests=("orders", "price_band", "rules"),
     ),
@@ -906,6 +981,7 @@ CONFIG_SCHEMA = (
             "seqnum_dir": "one JSON file per session",
             "evidence_dir": "one JSONL file per run",
             "msgstore_dir": "outbound messages, for a real resend",
+            "orders_dir": "open orders, when orders.persist is on",
         }),
     ),
     ConfigSection(
@@ -926,6 +1002,19 @@ CONFIG_SCHEMA = (
                                              "a rule says otherwise",
                          "send_pending_acks": "send 150=6/E before the "
                                               "cancel or replace",
+                         "send_pending_new": "send 150=A before the 150=0 ack",
+                         "valid_accounts": "empty = no Account check; else "
+                                           "tag 1, when present, must be "
+                                           "one of these",
+                         "persist": "keep open orders across restarts "
+                                    "(storage.orders_dir)",
+                         "time_in_force": "TimeInForce values accepted, by "
+                                          "name: " + ", ".join(_VALID_TIF),
+                         "ioc_fok_ack": "send the 150=0 ack before an IOC "
+                                        "or FOK order's fill, cancel or "
+                                        "kill; off: the outcome comes first",
+                         "status_requests": "answer OrderStatusRequest (35=H) "
+                                            "instead of a 35=j",
                      }),
     ),
     ConfigSection(
@@ -939,6 +1028,8 @@ CONFIG_SCHEMA = (
                                    "as the live fallback",
                          "static_default": "the price for a symbol not listed",
                          "warm_symbols": "fetched once at startup",
+                         "negative_cache_seconds": "how long a failed live "
+                                                   "lookup is remembered",
                      }),
     ),
     ConfigSection(

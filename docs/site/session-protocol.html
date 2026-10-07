@@ -10,7 +10,7 @@
 <div class="shell">
 <aside class="sidebar">
 <a class="brand" href="index.html">OrderEchoFixEmulator</a>
-<span class="version">0.8.0 (cook8)</span>
+<span class="version">0.9.0 (cook9)</span>
 <nav aria-label="Guide">
 <ol>
 <li><a href="index.html">Overview</a></li>
@@ -95,6 +95,21 @@ silence.</p>
 </table>
 <p>Resetting: a Logon with <code>141=Y</code>, <code>--reset-seqnums</code> at startup, or
 <code>POST /sessions/{id}/reset-seqnums</code>.</p>
+<h3 id="the-gap-queue">The gap queue</h3>
+<p>With <code>gap_queue: true</code> (per session, or under <code>defaults:</code>; on in
+<code>config/orderecho_multi.yaml</code>) a gap is handled the way the OrderEcho agent
+handles one:</p>
+<ul>
+<li>the ResendRequest asks for exactly the missing range,
+  <code>7=&lt;expected&gt; 16=&lt;received - 1&gt;</code>, instead of <code>16=0</code>;</li>
+<li>the message that revealed the gap, and every later one, is <strong>held</strong> rather
+  than dropped, and processed in sequence order once the range is filled — so
+  a TestRequest behind a gap is answered after the fill;</li>
+<li>if a hole remains before what is held, another ResendRequest asks for it;</li>
+<li>a Logon that revealed the gap is processed at once, and its sequence number
+  is consumed after the fill;</li>
+<li>at most 1000 messages are held; one more is a Logout and a disconnect.</li>
+</ul>
 <h2 id="resendrequest">ResendRequest</h2>
 <p>By default a ResendRequest is answered by replaying <strong>the actual messages that
 were sent</strong>, not by gap-filling the range.</p>
@@ -139,7 +154,7 @@ things here:</p>
 <tr>
 <td><strong>Business Reject</strong> <code>35=j</code></td>
 <td>The message is well-formed but is a type we do not handle</td>
-<td><code>45</code>, <code>380=3</code> unsupported message type</td>
+<td><code>45</code>, <code>372</code>, <code>380=3</code> unsupported message type, and with <code>business_reject_ref_id: true</code> <code>379</code></td>
 </tr>
 <tr>
 <td><strong>ExecutionReport reject</strong> <code>35=8 39=8</code></td>
@@ -187,6 +202,11 @@ things here:</p>
 </table>
 <p>A message with no usable MsgSeqNum cannot be sequenced at all, so it is
 rejected with <code>373=1</code> and the session carries on.</p>
+<p>With <code>business_reject_ref_id: true</code> (on in <code>config/orderecho_multi.yaml</code>) a
+<code>35=j</code> carries <code>379</code> BusinessRejectRefID whenever the rejected message had a
+business-level ID — ClOrdID first, then the other IDs FIX lists (QuoteID,
+MDReqID, ...) — and leaves it out when there was none, as FIX requires.
+<code>35=H</code> is a business reject too, unless <code>orders.status_requests</code> is on.</p>
 <h2 id="logout">Logout</h2>
 <p>Either side may start it. The emulator sends a Logout with a <code>58</code> saying why,
 moves to LOGOUT_SENT, and waits up to <code>logout_timeout_sec</code> for the reply before
@@ -198,7 +218,7 @@ then the socket closes.</p>
 and then the door. It never gets a session Reject, because a Reject is a message
 in a dialect, and there is no shared dialect to send it in.</p>
 <div class="footer">
-OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+OrderEchoFixEmulator 0.9.0 (cook9). Reference tables on this page are generated
 from the code by <code>orderecho_BuildDocs.py</code>.
 </div>
 </main>

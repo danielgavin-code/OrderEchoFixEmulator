@@ -79,19 +79,45 @@ class YFinancePriceSource:
     """
 
     def __init__(self, static_source: StaticPriceSource, clock,
-                 cache_seconds: float = 300, engine_log=None) -> None:
+                 cache_seconds: float = 300, engine_log=None,
+                 negative_cache_seconds: float = 0) -> None:
+        # 0 = no negative cache.  The engine passes the config's value
+        # (pricing.negative_cache_seconds, default 300).
         self.static_source = static_source
         self.clock = clock
         self.cache_seconds = float(cache_seconds)
+        self.negative_cache_seconds = float(negative_cache_seconds)
         self.engine_log = engine_log
         self._cache: dict[str, tuple] = {}
+        #: Symbols whose live lookup failed, with the fallback quote we gave
+        #: and when: for negative_cache_seconds the next order is answered at
+        #: once instead of waiting for the same failure again.
+        self._negative: dict[str, tuple] = {}
 
     def static_price(self, symbol: str) -> Decimal:
         return self.static_source.static_price(symbol)
 
     def fallback(self, symbol: str, reason: str = "") -> PriceQuote:
         self._warn(symbol, reason)
-        return self.static_source.fallback(symbol)
+        quote = self.static_source.fallback(symbol)
+        if self.negative_cache_seconds > 0:
+            self._negative[symbol] = (quote, self.clock.now())
+        return quote
+
+    def _negatively_cached(self, symbol: str) -> PriceQuote | None:
+        entry = self._negative.get(symbol)
+        if entry is None:
+            return None
+        quote, stored_at = entry
+        if (self.clock.now() - stored_at).total_seconds() >= \
+                self.negative_cache_seconds:
+            del self._negative[symbol]
+            return None
+        return quote
+
+    def peek(self, symbol: str) -> PriceQuote | None:
+        """A cached answer, good or negative, without any lookup."""
+        return self._cached(symbol) or self._negatively_cached(symbol)
 
     def _warn(self, symbol: str, reason: str) -> None:
         if self.engine_log is not None and reason:
@@ -116,7 +142,7 @@ class YFinancePriceSource:
 
     def get(self, symbol: str) -> PriceQuote:
         """Blocking lookup.  Never raises; always returns a usable quote."""
-        cached = self._cached(symbol)
+        cached = self.peek(symbol)
         if cached is not None:
             return cached
 
@@ -145,6 +171,7 @@ class YFinancePriceSource:
 
         quote = PriceQuote(price, SOURCE_LIVE_YFINANCE)
         self._cache[symbol] = (quote, self.clock.now())
+        self._negative.pop(symbol, None)
         return quote
 
 
@@ -159,6 +186,7 @@ def build_price_source(config, clock, engine_log=None):
         clock,
         cache_seconds=pricing.cache_seconds,
         engine_log=engine_log,
+        negative_cache_seconds=getattr(pricing, "negative_cache_seconds", 300),
     )
 
 
@@ -330,6 +358,13 @@ async def resolve_quote(source, symbol: str, timeout_sec: float) -> PriceQuote:
     """
     if isinstance(source, StaticPriceSource):
         return source.get(symbol)
+    peek = getattr(source, "peek", None)
+    if callable(peek):
+        cached = peek(symbol)
+        if cached is not None:
+            # Answered at once: a good quote, or a recent failure we will
+            # not wait for again (pricing.negative_cache_seconds).
+            return cached
     try:
         return await asyncio.wait_for(
             asyncio.to_thread(source.get, symbol), timeout_sec

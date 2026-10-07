@@ -41,6 +41,7 @@ TAG_REF_TAG_ID = 371
 TAG_REF_MSG_TYPE = 372
 TAG_SESSION_REJECT_REASON = 373
 TAG_BUSINESS_REJECT_REASON = 380
+TAG_BUSINESS_REJECT_REF_ID = 379
 
 # Session-level message types we handle ourselves; anything else is an
 # application message.
@@ -52,6 +53,7 @@ MSG_SEQUENCE_RESET = "4"
 MSG_LOGOUT = "5"
 MSG_LOGON = "A"
 MSG_BUSINESS_REJECT = "j"
+MSG_ORDER_STATUS_REQUEST = "H"
 
 SESSION_MSG_TYPES = frozenset(
     {
@@ -79,6 +81,31 @@ REJECT_COMPID_PROBLEM = "9"
 
 # BusinessRejectReason (380).
 BUSINESS_REJECT_UNSUPPORTED_MSG_TYPE = "3"
+
+#: The business-level ID a BusinessRejectRefID (379) refers to, in the order
+#: FIX lists them: the first of these the rejected message carries is echoed.
+BUSINESS_ID_TAGS = (
+    11,     # ClOrdID: orders, cancels, replaces, status requests
+    66,     # ListID
+    70,     # AllocID
+    117,    # QuoteID
+    131,    # QuoteReqID
+    262,    # MDReqID
+    320,    # SecurityReqID
+    324,    # SecurityStatusReqID
+    335,    # TradSesReqID
+    390,    # BidID
+    23,     # IOIid
+    2,      # AdvId
+    164,    # EmailThreadID
+    162,    # SettlInstID
+    790,    # OrdStatusReqID
+    37,     # OrderID
+    17,     # ExecID
+)
+
+#: §6.2: how many early messages a gap may hold before we give up.
+GAP_QUEUE_LIMIT = 1000
 
 
 # ------------------------------------------------------------------ actions
@@ -243,6 +270,15 @@ class Session:
         self.resend_outstanding = False
         self.resend_gap_high: int | None = None
 
+        #: §6.2 (session.gap_queue): messages that arrived beyond a
+        #: gap, by MsgSeqNum, processed in order once it is filled.  A value
+        #: of None marks a seq already consumed (a Logon that revealed a gap).
+        self.gap_queue = bool(getattr(self.config, "gap_queue", False))
+        self.business_reject_ref_id = bool(
+            getattr(self.config, "business_reject_ref_id", False))
+        self.held: dict = {}
+        self._draining = False
+
         self.logout_sent_at = None
 
     # ------------------------------------------------------------- helpers
@@ -289,11 +325,20 @@ class Session:
             body.append((TAG_TEXT, text))
         return self._send(MSG_REJECT, body)
 
-    def _business_reject(self, ref_seq, msg_type, reason, text) -> Send:
+    def _business_reject(self, ref_seq, msg_type, reason, text,
+                         msg=None) -> Send:
         body = []
         if ref_seq is not None:
             body.append((TAG_REF_SEQ_NUM, str(ref_seq)))
         body.append((TAG_REF_MSG_TYPE, msg_type))
+        if self.business_reject_ref_id and msg is not None:
+            # 379 is required whenever the rejected message carried a
+            # business-level ID, and absent otherwise (FIX 4.2/4.4).
+            for tag in BUSINESS_ID_TAGS:
+                value = msg.get(tag)
+                if value:
+                    body.append((TAG_BUSINESS_REJECT_REF_ID, value))
+                    break
         body.append((TAG_BUSINESS_REJECT_REASON, reason))
         body.append((TAG_TEXT, text))
         return self._send(MSG_BUSINESS_REJECT, body)
@@ -328,6 +373,7 @@ class Session:
         self.pending_test_req_at = None
         self.resend_outstanding = False
         self.resend_gap_high = None
+        self.held = {}
         self.logout_sent_at = None
         self.deferral_recorded = False
         return [Evidence("connected", "awaiting Logon")]
@@ -339,8 +385,15 @@ class Session:
         self.pending_test_req_at = None
         self.logout_sent_at = None
         self._persist()
+        dropped_held = len(self.held)
+        self.held = {}
         actions = [Evidence("disconnected",
                             f"next_out={self.next_out} next_in={self.expected_in}")]
+        if dropped_held:
+            actions.append(Evidence(
+                "held messages dropped on disconnect",
+                f"{dropped_held} message(s) held behind a gap were never "
+                f"processed"))
         actions.extend(self._note_deferred_events())
         return actions
 
@@ -477,24 +530,47 @@ class Session:
         )
 
         if gap:
-            actions.extend(self._request_resend(expected, seq))
+            if self.gap_queue:
+                # The Logon itself is processed; its seq is consumed once the
+                # range before it has been filled.
+                self.held[seq] = None
+                actions.extend(self._request_resend(expected, seq - 1))
+            else:
+                actions.extend(self._request_resend(expected, seq))
+        actions.extend(self._app_on_logon())
         return actions
+
+    def _app_on_logon(self) -> list:
+        """Let the order book react to a logon (§5: restored orders)."""
+        hook = getattr(self.app, "on_session_logon", None)
+        if not callable(hook):
+            return []
+        return self._run_app(hook())
 
     def _request_resend(self, begin_seq: int, gap_high: int | None) -> list:
         if self.resend_outstanding:
             return []
         self.resend_outstanding = True
         self.resend_gap_high = gap_high
+        # §6.2: a closed range when the gap queue is on; Cook 1's
+        # open-ended 16=0 otherwise.
+        end = str(gap_high) if self.gap_queue and gap_high is not None else "0"
         return [
             self._send(
                 MSG_RESEND_REQUEST,
-                [(TAG_BEGIN_SEQ_NO, str(begin_seq)), (TAG_END_SEQ_NO, "0")],
+                [(TAG_BEGIN_SEQ_NO, str(begin_seq)), (TAG_END_SEQ_NO, end)],
             )
         ]
 
     # --------------------------------------------------------- active phase
 
     def _on_active(self, msg, market_price=None) -> list:
+        actions = self._on_active_one(msg, market_price)
+        if self.gap_queue and self.held and not self._draining:
+            actions = list(actions or []) + self._drain_held()
+        return actions
+
+    def _on_active_one(self, msg, market_price=None) -> list:
         msg_type = msg.msg_type
         seq = msg.seq_num
 
@@ -547,6 +623,8 @@ class Session:
 
     def _sequence_check(self, msg, seq: int):
         """Return a list of actions if the message must not be processed."""
+        if self.gap_queue:
+            return self._sequence_check_queued(msg, seq)
         expected = self.expected_in
         if seq == expected:
             self.expected_in = seq + 1
@@ -583,6 +661,100 @@ class Session:
         return self._logout_and_disconnect(
             f"MsgSeqNum too low, expecting {expected} but received {seq}"
         )
+
+    # ------------------------------------------------ §6.2 gap queue
+
+    def _sequence_check_queued(self, msg, seq: int):
+        """Closed-range resend: hold what arrives early, process it in order.
+
+        Mirrors the agent (A3 §3.1): on a gap ask for exactly
+        `expected .. received-1`, keep the triggering message and every later
+        one, and once the range is filled run them in sequence order.
+        """
+        expected = self.expected_in
+        if seq == expected:
+            self.expected_in = seq + 1
+            self._persist()
+            self._clear_resend_if_covered()
+            return None
+        if seq < expected:
+            if msg.get(TAG_POSS_DUP_FLAG) == "Y":
+                return [Evidence(
+                    "possdup ignored",
+                    f"MsgSeqNum {seq} below expected {expected}, 43=Y")]
+            return self._logout_and_disconnect(
+                f"MsgSeqNum too low, expecting {expected} but received {seq}")
+
+        actions = [Evidence("seq gap detected",
+                            f"received MsgSeqNum {seq}, expecting {expected}")]
+        if seq in self.held:
+            actions.append(Evidence("held duplicate ignored",
+                                    f"MsgSeqNum {seq} is already held"))
+            return actions
+        if len(self.held) >= GAP_QUEUE_LIMIT:
+            actions.append(Evidence(
+                "gap queue overflow",
+                f"{len(self.held)} messages held behind the gap at "
+                f"{expected}; giving up"))
+            return actions + self._logout_and_disconnect(
+                f"Gap queue overflow: more than {GAP_QUEUE_LIMIT} messages "
+                f"held waiting for MsgSeqNum {expected}")
+        self.held[seq] = msg
+        actions.append(Evidence("message held",
+                                f"35={msg.msg_type} MsgSeqNum {seq} held "
+                                f"until {expected}..{seq - 1} arrive"))
+        if self.resend_outstanding:
+            actions.append(Evidence(
+                "resend already outstanding",
+                f"no second ResendRequest for MsgSeqNum {seq}"))
+            return actions
+        actions.extend(self._request_resend(expected, seq - 1))
+        return actions
+
+    def _drain_held(self, market_price=None) -> list:
+        """Process held messages that are now in sequence, in order."""
+        if not self.gap_queue or not self.held or self._draining:
+            return []
+        self._draining = True
+        actions: list = []
+        try:
+            while self.held and self.state is not State.DISCONNECTED:
+                # Copies the fill skipped over are no longer wanted.
+                for stale in [s for s in self.held if s < self.expected_in]:
+                    held = self.held.pop(stale)
+                    if held is not None:
+                        actions.append(Evidence(
+                            "held message dropped",
+                            f"MsgSeqNum {stale} is below {self.expected_in} "
+                            f"after the gap fill"))
+                if self.expected_in not in self.held:
+                    break
+                seq = self.expected_in
+                held = self.held.pop(seq)
+                if held is None:
+                    # The Logon that revealed the gap: already processed.
+                    self.expected_in = seq + 1
+                    self._persist()
+                    self._clear_resend_if_covered()
+                    actions.append(Evidence(
+                        "held logon consumed",
+                        f"MsgSeqNum {seq} (the Logon) consumed after the "
+                        f"gap fill"))
+                    continue
+                actions.append(Evidence(
+                    "held message processed",
+                    f"35={held.msg_type} MsgSeqNum {seq}"))
+                actions.extend(self._on_active(held, None))
+            if self.held and self.state is State.ACTIVE \
+                    and not self.resend_outstanding:
+                # Still a hole before what we hold: ask for that one too.
+                first = min(self.held)
+                if first > self.expected_in:
+                    actions.extend(self._request_resend(self.expected_in,
+                                                        first - 1))
+        finally:
+            self._draining = False
+        return actions
 
     def _dispatch(self, msg, msg_type: str, seq: int, market_price=None) -> list:
         if msg_type == MSG_HEARTBEAT:
@@ -641,7 +813,10 @@ class Session:
                 self._reject(seq, None, "Logon received while already logged on")
             ]
 
-        if self.app is not None and msg_type in APP_MSG_TYPES:
+        if self.app is not None and (
+                msg_type in APP_MSG_TYPES or (
+                    msg_type == MSG_ORDER_STATUS_REQUEST
+                    and getattr(self.app, "answers_status_requests", False))):
             return self._run_app(self.app.on_app_message(msg, market_price))
 
         # Anything else is an application message; unsupported in this build.
@@ -651,6 +826,7 @@ class Session:
                 msg_type or "",
                 BUSINESS_REJECT_UNSUPPORTED_MSG_TYPE,
                 "Not supported in this build",
+                msg=msg,
             )
         ]
 

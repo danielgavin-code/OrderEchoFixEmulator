@@ -10,7 +10,7 @@
 <div class="shell">
 <aside class="sidebar">
 <a class="brand" href="index.html">OrderEchoFixEmulator</a>
-<span class="version">0.8.0 (cook8)</span>
+<span class="version">0.9.0 (cook9)</span>
 <nav aria-label="Guide">
 <ol>
 <li><a href="index.html">Overview</a></li>
@@ -32,6 +32,39 @@
 <h1 id="changelog">Changelog</h1>
 <p>The emulator was built in a series of overnight runs, each from a written
 spec. Each one is a version.</p>
+<h2 id="090-cook9">0.9.0 — cook9</h2>
+<p>The gaps a certification run found, closed. Every new behaviour is off in
+<code>config/orderecho.yaml</code> and on in <code>config/orderecho_multi.yaml</code>.</p>
+<ul>
+<li>TimeInForce beyond Day (<code>orders.time_in_force</code>): IOC and FOK act on the
+  rule's immediate outcome, GTD expires (<code>150=C</code>), GTC persists.</li>
+<li>Lifecycle states: Pending New (<code>orders.send_pending_new</code>); Done For Day,
+  Expire, and lock/unlock for "too late to cancel" through the control API.</li>
+<li>Account validation (<code>orders.valid_accounts</code>), <code>103=0</code> in 4.2, <code>103=15</code> in
+  4.4.</li>
+<li>Open orders survive a restart (<code>orders.persist</code>, <code>storage.orders_dir</code>), and
+  <code>POST /admin/restart</code> restarts the engine inside the process.</li>
+<li>OrderStatusRequest (<code>35=H</code>) answered (<code>orders.status_requests</code>).</li>
+<li><code>379</code> BusinessRejectRefID on a <code>35=j</code> (<code>business_reject_ref_id</code>).</li>
+<li>The gap queue (<code>gap_queue</code>): a closed-range ResendRequest, with early
+  messages held and processed in order once the gap is filled.</li>
+<li>A negative price cache (<code>pricing.negative_cache_seconds</code>, default 300).</li>
+<li>Timeline fixes for parity with the OrderEcho agent: a Reject only answers
+  the other side's request; a message is framed by BodyLength, so <code>110=</code> no
+  longer ends it; framing is checked over the bytes as written, so non-ASCII
+  values are not flagged; a duplicate request's reject forms its own chain.</li>
+<li>The demo client sends <code>--tif</code>, <code>--expire-time</code>, <code>--expire-date</code>, <code>--account</code>,
+  and <code>query</code> sends an OrderStatusRequest.</li>
+</ul>
+<p>Follow-ups (9.1):</p>
+<ul>
+<li><code>orders.ioc_fok_ack</code> (default true): set it false and an IOC or FOK order's
+  outcome is its first report, with no <code>150=0</code> before it.</li>
+<li><code>orders.valid_accounts</code> checks tag 1 only when it is present: an order with
+  no Account is accepted.</li>
+<li>The test suite's repo guard names a running emulator that is writing to the
+  repo's <code>data/</code> or <code>logs/</code> (by pid), instead of blaming the tests.</li>
+</ul>
 <h2 id="080-cook8">0.8.0 — cook8</h2>
 <p>Documentation and polish.</p>
 <ul>
@@ -125,7 +158,7 @@ spec. Each one is a version.</p>
 <li>The evidence log, the FIX log and the engine log.</li>
 </ul>
 <div class="footer">
-OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+OrderEchoFixEmulator 0.9.0 (cook9). Reference tables on this page are generated
 from the code by <code>orderecho_BuildDocs.py</code>.
 </div>
 </main>

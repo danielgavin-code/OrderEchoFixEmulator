@@ -5,13 +5,15 @@ messages and evidence out.  No sockets, no network, no wall clock.  Given the
 same messages, the same config and the same quotes, this produces byte-identical
 output except for the timestamps the clock supplies.
 
-Orders live in memory for one engine run; nothing here persists.
+Orders live in memory.  With `orders.persist` on  every change is
+also handed to an injected OrderStore, and a restarted engine reloads its
+open orders through restore(); the book itself still never touches a file.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from orderecho_Codec import format_time
@@ -35,6 +37,7 @@ from orderecho_FixVersion import (
     ResponseTo,
 )
 from orderecho_Session import AppSend, Evidence, RequestPrice, SessionReject
+from orderecho_Config import TIF_NAMES
 
 # ---------------------------------------------------------------------- tags
 
@@ -67,6 +70,7 @@ TAG_CXL_REJ_RESPONSE_TO = 434
 MSG_NEW_ORDER_SINGLE = "D"
 MSG_ORDER_CANCEL_REQUEST = "F"
 MSG_ORDER_CANCEL_REPLACE_REQUEST = "G"
+MSG_ORDER_STATUS_REQUEST = "H"
 MSG_EXECUTION_REPORT = "8"
 MSG_ORDER_CANCEL_REJECT = "9"
 
@@ -85,6 +89,9 @@ STATUS_REPLACED = "5"
 STATUS_PENDING_CANCEL = "6"
 STATUS_REJECTED = "8"
 STATUS_PENDING_REPLACE = "E"
+STATUS_DONE_FOR_DAY = "3"
+STATUS_PENDING_NEW = "A"
+STATUS_EXPIRED = "C"
 
 STATUS_NAMES = {
     STATUS_NEW: "NEW",
@@ -95,6 +102,9 @@ STATUS_NAMES = {
     STATUS_PENDING_CANCEL: "PENDING_CANCEL",
     STATUS_REJECTED: "REJECTED",
     STATUS_PENDING_REPLACE: "PENDING_REPLACE",
+    STATUS_DONE_FOR_DAY: "DONE_FOR_DAY",
+    STATUS_PENDING_NEW: "PENDING_NEW",
+    STATUS_EXPIRED: "EXPIRED",
 }
 
 # OrdRejReason (103) and CxlRejReason (102) values now live in the version
@@ -114,6 +124,27 @@ HANDL_INSTS = frozenset({"1", "2", "3"})
 ORD_TYPE_MARKET = "1"
 ORD_TYPE_LIMIT = "2"
 TIME_IN_FORCE_DAY = "0"
+TIF_GTC = "1"
+TIF_IOC = "3"
+TIF_FOK = "4"
+TIF_GTX = "5"
+TIF_GTD = "6"
+TIF_LABELS = {"0": "DAY", "1": "GTC", "3": "IOC", "4": "FOK", "5": "GTX",
+              "6": "GTD"}
+TAG_EXPIRE_TIME = 126
+TAG_EXPIRE_DATE = 432
+TAG_ORD_STATUS_REQ_ID = 790
+
+#: Scheduled event kinds that end an order without filling it.
+EVENT_CANCEL = "cancel"              # a rule's cancel_after_ack / then: cancel
+EVENT_IOC_CANCEL = "ioc_cancel"      # IOC: whatever did not fill at once
+EVENT_FOK_KILL = "fok_kill"          # FOK: not fully fillable
+EVENT_EXPIRE = "expire"              # GTD: ExpireTime reached
+#:  events that close an order and need no price, so a market order
+#: still waiting for its quote is not held back by one.  (A rule's own
+#: cancel keeps its earlier behaviour and waits for the price like a fill.)
+PRICE_FREE_EVENTS = frozenset({EVENT_IOC_CANCEL, EVENT_FOK_KILL,
+                               EVENT_EXPIRE})
 
 SIDE_NAMES = {"1": "BUY", "2": "SELL", "5": "SELLSHORT", "6": "SELLSHORTEXEMPT"}
 ORD_TYPE_NAMES = {ORD_TYPE_MARKET: "MKT", ORD_TYPE_LIMIT: "LMT"}
@@ -242,6 +273,52 @@ def _parse_utc_timestamp(raw) -> bool:
         and minute <= 59 and second <= 60
 
 
+def _parse_expire_time(raw):
+    """ExpireTime (126), a UTCTimestamp -> aware datetime, or None."""
+    if not _parse_utc_timestamp(raw):
+        return None
+    body, _, fraction = raw.partition(".")
+    try:
+        when = datetime.strptime(body, "%Y%m%d-%H:%M:%S").replace(
+            tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    if fraction:
+        when += timedelta(microseconds=int(fraction[:6].ljust(6, "0")))
+    return when
+
+
+def _parse_expire_date(raw):
+    """ExpireDate (432), YYYYMMDD -> the end of that UTC day, or None.
+
+    FIX means a local market date; with no market calendar here the order
+    lives through the whole UTC day and expires at its last millisecond.
+    """
+    if not isinstance(raw, str) or len(raw) != 8 or not raw.isdigit():
+        return None
+    try:
+        day = datetime.strptime(raw, "%Y%m%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return day + timedelta(days=1) - timedelta(milliseconds=1)
+
+
+def _iso(when):
+    if when is None:
+        return None
+    return when.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+
+
+def _from_iso(text):
+    if not text:
+        return None
+    try:
+        when = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
 # ------------------------------------------------------------------- state
 
 
@@ -274,6 +351,12 @@ class OrderState:
     scheduled: list = field(default_factory=list)
     closed: bool = False
     ack_time: object = None
+    # Lifecycle states, TIF, persistence
+    time_in_force: str = TIME_IN_FORCE_DAY
+    expire_at: object = None          # GTD: when it expires (UTC)
+    locked: bool = False              # "fill in progress": F/G get 102=0
+    trade_date: str = ""              # YYYYMMDD (UTC) it was accepted
+    restored: bool = False            # reloaded from the order store
 
     @property
     def price_pending(self) -> bool:
@@ -342,7 +425,8 @@ class OrderBook:
     """The order state machine.  Pure: time and prices are injected."""
 
     def __init__(self, orders_config, rules, clock, run_id: str,
-                 price_band=None, profile=None, id_generator=None) -> None:
+                 price_band=None, profile=None, id_generator=None,
+                 order_store=None) -> None:
         self.config = orders_config
         self.rules = rules
         self.clock = clock
@@ -356,6 +440,22 @@ class OrderBook:
         self._orders: dict[str, OrderState] = {}
         self._event_seq = 0
         self._used_cl_ord_ids: set[str] = set()
+        #: §5: where every change goes when orders.persist is on.
+        self.order_store = order_store
+
+    # ------------------------------------------------------  options
+
+    def _option(self, name, default):
+        return getattr(self.config, name, default)
+
+    @property
+    def accepted_tifs(self) -> frozenset:
+        names = self._option("time_in_force", ["day"]) or ["day"]
+        return frozenset(TIF_NAMES[name] for name in names if name in TIF_NAMES)
+
+    @property
+    def answers_status_requests(self) -> bool:
+        return bool(self._option("status_requests", False))
 
     # ------------------------------------------------------------ accessors
 
@@ -440,7 +540,12 @@ class OrderBook:
                        self.profile.render_cancel_reject(reject))
 
     def _order_events(self, order: OrderState, line: str) -> list:
-        """The §9 pair: an evidence snapshot plus one human log line."""
+        """The §9 pair: an evidence snapshot plus one human log line.
+
+        Every state change of an order passes through here, so this is also
+        where it is persisted .
+        """
+        self._persist(order)
         return [
             Evidence(
                 "order",
@@ -514,7 +619,9 @@ class OrderBook:
             return self._on_cancel_request(msg)
         if msg_type == MSG_ORDER_CANCEL_REPLACE_REQUEST:
             return self._on_replace_request(msg, market_price)
-        return []  # pragma: no cover - the session only routes D/F/G here
+        if msg_type == MSG_ORDER_STATUS_REQUEST:
+            return self._on_status_request(msg)
+        return []  # pragma: no cover - the session only routes D/F/G/H here
 
     # ----------------------------------------------------------- validation
 
@@ -579,6 +686,31 @@ class OrderBook:
                 ref_seq, TAG_TIME_IN_FORCE, SESSION_REJECT_VALUE_INCORRECT,
                 f"TimeInForce not a {version} value: {time_in_force}",
             )
+        # §3: a GTD order we accept must say when it expires.
+        if msg_type == MSG_NEW_ORDER_SINGLE and time_in_force == TIF_GTD \
+                and TIF_GTD in self.accepted_tifs:
+            expire_time = msg.get(TAG_EXPIRE_TIME)
+            expire_date = msg.get(TAG_EXPIRE_DATE)
+            if expire_time is None and expire_date is None:
+                return SessionReject(
+                    ref_seq, TAG_EXPIRE_TIME,
+                    SESSION_REJECT_REQUIRED_TAG_MISSING,
+                    "Required tag missing: 126 (GTD needs ExpireTime 126 or "
+                    "ExpireDate 432)",
+                )
+            if expire_time is not None and \
+                    _parse_expire_time(expire_time) is None:
+                return SessionReject(
+                    ref_seq, TAG_EXPIRE_TIME,
+                    SESSION_REJECT_INCORRECT_DATA_FORMAT,
+                    f"ExpireTime is not a UTC timestamp: {expire_time}",
+                )
+            if expire_time is None and _parse_expire_date(expire_date) is None:
+                return SessionReject(
+                    ref_seq, TAG_EXPIRE_DATE,
+                    SESSION_REJECT_INCORRECT_DATA_FORMAT,
+                    f"ExpireDate is not a YYYYMMDD date: {expire_date}",
+                )
         return None
 
     def _business_failure(self, msg, require_order_fields: bool):
@@ -604,9 +736,23 @@ class OrderBook:
                     return Reason.BAD_PRICE, f"Price must be > 0: {price_raw}"
 
         time_in_force = msg.get(TAG_TIME_IN_FORCE)
-        if time_in_force is not None and time_in_force != TIME_IN_FORCE_DAY:
+        if time_in_force is not None and \
+                time_in_force not in self.accepted_tifs:
             return Reason.UNSUPPORTED_CHARACTERISTIC, "TimeInForce not supported"
         return None, None
+
+    def _account_failure(self, msg):
+        """§4: orders.valid_accounts, when set, must include tag 1 if it is
+        present.  An order without an Account is not checked."""
+        valid = self._option("valid_accounts", []) or []
+        if not valid:
+            return None
+        account = msg.get(TAG_ACCOUNT)
+        if account is None or account == "":
+            return None
+        if account not in valid:
+            return f"Unknown account {account}"
+        return None
 
     # ------------------------------------------------ D: NewOrderSingle
 
@@ -628,7 +774,14 @@ class OrderBook:
             and qty_decimal == qty_decimal.to_integral_value() else 0,
             price=price,
             account=msg.get(TAG_ACCOUNT),
+            time_in_force=msg.get(TAG_TIME_IN_FORCE) or TIME_IN_FORCE_DAY,
+            trade_date=self.clock.now().astimezone(timezone.utc).strftime(
+                "%Y%m%d"),
         )
+        if order.time_in_force == TIF_GTD:
+            order.expire_at = (_parse_expire_time(msg.get(TAG_EXPIRE_TIME))
+                               if msg.get(TAG_EXPIRE_TIME) is not None
+                               else _parse_expire_date(msg.get(TAG_EXPIRE_DATE)))
         order.cl_ord_id_chain.append(cl_ord_id)
         order.leaves_qty = order.order_qty
         self._orders[order.order_id] = order
@@ -637,6 +790,10 @@ class OrderBook:
         if reason is None and cl_ord_id in self._used_cl_ord_ids:
             reason, text = Reason.DUPLICATE_CL_ORD_ID, "Duplicate ClOrdID"
         self._used_cl_ord_ids.add(cl_ord_id)
+        if reason is None:
+            account_text = self._account_failure(msg)
+            if account_text is not None:
+                reason, text = Reason.UNKNOWN_ACCOUNT, account_text
         if reason is not None:
             return self._reject_order(order, reason, text)
 
@@ -696,13 +853,31 @@ class OrderBook:
                 reason_code=rule.reject_code,
             )
 
+        if self._option("send_pending_new", False):
+            # §4: Pending New first, then the normal acknowledgement.
+            order.ord_status = STATUS_PENDING_NEW
+            actions.append(self._execution_report(order,
+                                                  ReportKind.PENDING_NEW))
+            actions.extend(self._order_events(order, self._order_line(order)))
         order.ord_status = STATUS_NEW
         order.ack_time = self.clock.now()
-        actions.append(self._execution_report(order, ReportKind.ACK))
+        if (order.time_in_force in (TIF_IOC, TIF_FOK)
+                and not self._option("ioc_fok_ack", True)):
+            # orders.ioc_fok_ack off: the outcome is the first answer.
+            actions.append(Evidence(
+                "ack skipped",
+                f"{order.order_id} {TIF_LABELS.get(order.time_in_force)}: "
+                f"orders.ioc_fok_ack is off, the outcome is the first report"))
+        else:
+            actions.append(self._execution_report(order, ReportKind.ACK))
         actions.extend(self._order_events(order, self._order_line(order)))
         actions.extend(self._schedule(order, rule))
+        self._persist(order)               # now with its schedule
         if order.price_pending:
             actions.append(RequestPrice(order.order_id, symbol))
+        if order.time_in_force in (TIF_IOC, TIF_FOK) and order.scheduled:
+            # IOC and FOK are decided now, not on the next timer tick.
+            actions.extend(self._fire_due(self.clock.now(), only_order=order))
         return actions
 
     def _reject_order(self, order: OrderState, reason: Reason,
@@ -718,6 +893,48 @@ class OrderBook:
         return [report] + self._order_events(order, self._order_line(order))
 
     def _schedule(self, order: OrderState, rule) -> list:
+        if order.time_in_force in (TIF_IOC, TIF_FOK):
+            return self._schedule_immediate(order, rule)
+        actions = self._schedule_rule(order, rule)
+        if order.time_in_force == TIF_GTD and order.expire_at is not None:
+            self._event_seq += 1
+            order.scheduled.append(ScheduledEvent(
+                due=order.expire_at, kind=EVENT_EXPIRE,
+                sequence=self._event_seq))
+            actions.append(Evidence(
+                "order expiry scheduled",
+                f"{order.order_id} GTD expires at "
+                f"{format_time(order.expire_at)}"))
+        return actions
+
+    def _schedule_immediate(self, order: OrderState, rule) -> list:
+        """§3: IOC and FOK act on the rule's immediate outcome only."""
+        now = self.clock.now()
+        planned: list = []
+        if order.time_in_force == TIF_IOC:
+            if rule.behavior == BEHAVIOR_FULL_FILL:
+                planned.append(("fill", order.order_qty))
+            elif rule.behavior == BEHAVIOR_PARTIAL_FILL:
+                first = rule.resolve_fills(order.order_qty)[:1]
+                planned.extend(("fill", shares) for shares in first)
+            planned.append((EVENT_IOC_CANCEL, 0))
+        else:
+            fillable = (rule.behavior == BEHAVIOR_FULL_FILL or (
+                rule.behavior == BEHAVIOR_PARTIAL_FILL
+                and rule.then == THEN_FILL_REST))
+            planned.append(("fill", order.order_qty) if fillable
+                           else (EVENT_FOK_KILL, 0))
+        for kind, shares in planned:
+            self._event_seq += 1
+            order.scheduled.append(ScheduledEvent(
+                due=now, kind=kind, shares=shares, sequence=self._event_seq))
+        label = TIF_LABELS.get(order.time_in_force, order.time_in_force)
+        return [Evidence(
+            "order events scheduled",
+            f"{len(planned)} immediate event(s) for {order.order_id} "
+            f"({label}: {', '.join(kind for kind, _ in planned)})")]
+
+    def _schedule_rule(self, order: OrderState, rule) -> list:
         delay_ms = rule.delay_for(self.rules.default_delay_ms)
         step = timedelta(milliseconds=delay_ms)
         base = self.clock.now()
@@ -799,13 +1016,17 @@ class OrderBook:
         for order in self._orders.values():
             if only_order is not None and order is not only_order:
                 continue
-            if order.price_pending:
-                # Nothing can fill at an unknown price; the events stay due and
-                # go out the moment on_price() lands.
-                continue
-            for event in list(order.scheduled):
-                if event.due <= now:
-                    due.append((event.due, event.sequence, order, event))
+            events = sorted(order.scheduled,
+                            key=lambda item: (item.due, item.sequence))
+            for event in events:
+                if event.due > now:
+                    continue
+                if order.price_pending and event.kind not in PRICE_FREE_EVENTS:
+                    # Nothing can fill at an unknown price; this and every
+                    # later event wait for on_price() (PRICE_FREE_EVENTS do
+                    # not).
+                    break
+                due.append((event.due, event.sequence, order, event))
         due.sort(key=lambda item: (item[0], item[1]))
 
         actions: list = []
@@ -813,8 +1034,20 @@ class OrderBook:
             if event not in order.scheduled:
                 continue
             order.scheduled.remove(event)
-            if event.kind == "cancel":
+            if event.kind == EVENT_CANCEL:
                 actions.extend(self._unsolicited_cancel(order))
+            elif event.kind == EVENT_IOC_CANCEL:
+                actions.extend(self._unsolicited_cancel(
+                    order, "IOC remainder canceled",
+                    why="IOC remainder canceled"))
+            elif event.kind == EVENT_FOK_KILL:
+                actions.extend(self._unsolicited_cancel(
+                    order, "FOK not fully fillable",
+                    why="FOK not fully fillable"))
+            elif event.kind == EVENT_EXPIRE:
+                actions.extend(self._close_order(
+                    order, STATUS_EXPIRED, ReportKind.EXPIRED,
+                    "GTD order expired", "order expired (GTD)"))
             else:
                 shares = order.leaves_qty if event.kind == "fill_rest" \
                     else event.shares
@@ -859,6 +1092,11 @@ class OrderBook:
         order.cum_qty += filled
         order.leaves_qty -= filled
         order.notional += Decimal(filled) * price
+        if order.locked:
+            # The fill that was "in progress" has happened.
+            order.locked = False
+            actions.append(Evidence("order unlocked",
+                                    f"{order.order_id} unlocked by a fill"))
 
         if order.leaves_qty == 0:
             order.ord_status = STATUS_FILLED
@@ -879,22 +1117,31 @@ class OrderBook:
             actions.extend(self._drop_scheduled(order, "order fully filled"))
         return actions
 
-    def _unsolicited_cancel(self, order: OrderState, text: str | None = None) -> list:
+    def _unsolicited_cancel(self, order: OrderState, text: str | None = None,
+                            why: str = "order canceled by rule") -> list:
         if order.closed:
             return [
                 Evidence("cancel skipped",
                          f"{order.order_id} is already closed")
             ]
-        order.ord_status = STATUS_CANCELED
-        order.leaves_qty = 0
-        order.closed = True
         if text is None:
             text = f"Canceled by OrderEcho rule {order.rule_name}"
-        actions = [
-            self._execution_report(order, ReportKind.CANCELED, text=text)
-        ]
+        return self._close_order(order, STATUS_CANCELED, ReportKind.CANCELED,
+                                 text, why)
+
+    def _close_order(self, order: OrderState, status: str, kind: ReportKind,
+                     text: str, why: str) -> list:
+        """End an open order without a fill: cancel, expiry, done for day."""
+        if order.closed:
+            return [Evidence("close skipped",
+                             f"{order.order_id} is already closed")]
+        order.ord_status = status
+        order.leaves_qty = 0
+        order.closed = True
+        order.locked = False
+        actions = [self._execution_report(order, kind, text=text)]
         actions.extend(self._order_events(order, self._order_line(order)))
-        actions.extend(self._drop_scheduled(order, "order canceled by rule"))
+        actions.extend(self._drop_scheduled(order, why))
         return actions
 
     # ------------------------------------------------------ manual actions
@@ -1003,7 +1250,51 @@ class OrderBook:
             )
         ]
         actions.extend(self._drop_scheduled(order, "order held via control API"))
+        self._persist(order)
         return actions
+
+    # --------------------------------------------  lifecycle actions
+
+    def done_for_day(self, order_id: str) -> list:
+        """150=3 39=3: the venue ends the order's day; nothing is left open."""
+        order = self._require_open(order_id)
+        return [Evidence("done for day", f"{order.order_id} via control API")] \
+            + self._close_order(order, STATUS_DONE_FOR_DAY,
+                                ReportKind.DONE_FOR_DAY,
+                                "Done for day via control API",
+                                "order done for day via control API")
+
+    def expire(self, order_id: str) -> list:
+        """150=C 39=C: expire any open order by hand."""
+        order = self._require_open(order_id)
+        return [Evidence("manual expiry", f"{order.order_id} via control API")] \
+            + self._close_order(order, STATUS_EXPIRED, ReportKind.EXPIRED,
+                                "Expired via control API",
+                                "order expired via control API")
+
+    def lock(self, order_id: str) -> list:
+        """Put an open order in "fill in progress": F/G get 102=0 until unlock
+        or its next fill or terminal event."""
+        order = self._require_open(order_id)
+        if order.locked:
+            raise OrderActionError("conflict",
+                                   f"Order {order_id} is already locked")
+        order.locked = True
+        self._persist(order)
+        return [Evidence(
+            "order locked",
+            f"{order.order_id} locked via control API: cancel/replace now "
+            f"get Too late to cancel until unlock, a fill or a terminal event")]
+
+    def unlock(self, order_id: str) -> list:
+        order = self._require_open(order_id)
+        if not order.locked:
+            raise OrderActionError("conflict",
+                                   f"Order {order_id} is not locked")
+        order.locked = False
+        self._persist(order)
+        return [Evidence("order unlocked",
+                         f"{order.order_id} unlocked via control API")]
 
     # --------------------------------------------- F / G shared lookup
 
@@ -1046,6 +1337,12 @@ class OrderBook:
                 order, cl_ord_id, orig_cl_ord_id, order.ord_status, response_to,
                 Reason.CXL_TOO_LATE,
                 f"Order is {STATUS_NAMES.get(order.ord_status, order.ord_status)}",
+            )
+        if order.locked:
+            return None, self._cancel_reject_actions(
+                order, cl_ord_id, orig_cl_ord_id, order.ord_status, response_to,
+                Reason.CXL_TOO_LATE,
+                "Too late to cancel: a fill is in progress",
             )
 
         reject_code, text = self._business_failure(
@@ -1197,3 +1494,198 @@ class OrderBook:
         )
         actions.extend(self._order_events(order, self._order_line(order)))
         return actions
+
+    # --------------------------------------------------  persistence
+
+    def _persist(self, order: OrderState) -> None:
+        if self.order_store is None:
+            return
+        if order.closed:
+            self.order_store.close_order(order.order_id)
+        else:
+            self.order_store.upsert(self.serialize(order))
+
+    def serialize(self, order: OrderState) -> dict:
+        """Everything needed to bring an open order back after a restart.
+
+        Scheduled events are stored as delays from now, so a reload
+        reschedules them relative to the moment it happens.
+        """
+        now = self.clock.now()
+        return {
+            "order_id": order.order_id,
+            "cl_ord_id": order.cl_ord_id,
+            "cl_ord_id_chain": list(order.cl_ord_id_chain),
+            "symbol": order.symbol,
+            "side": order.side,
+            "ord_type": order.ord_type,
+            "order_qty": order.order_qty,
+            "price": None if order.price is None else str(order.price),
+            "account": order.account,
+            "cum_qty": order.cum_qty,
+            "leaves_qty": order.leaves_qty,
+            "notional": str(order.notional),
+            "ord_status": order.ord_status,
+            "fill_price": (None if order.fill_price is None
+                           else str(order.fill_price)),
+            "price_source": order.price_source,
+            "rule_name": order.rule_name,
+            "time_in_force": order.time_in_force,
+            "expire_at": _iso(order.expire_at),
+            "locked": order.locked,
+            "trade_date": order.trade_date,
+            "saved_at": _iso(now),
+            "scheduled": [
+                {"kind": event.kind, "shares": event.shares,
+                 "delay_ms": max(0, int((event.due - now).total_seconds()
+                                        * 1000))}
+                for event in sorted(order.scheduled,
+                                    key=lambda e: (e.due, e.sequence))
+            ],
+        }
+
+    def restore(self, records) -> list:
+        """Reload open orders saved by an earlier run .
+
+        Returns evidence describing what came back.  Scheduled events resume
+        relative to now; a GTD order keeps its absolute expiry.
+        """
+        now = self.clock.now()
+        actions: list = []
+        for record in records or ():
+            try:
+                order = OrderState(
+                    order_id=record["order_id"],
+                    cl_ord_id=record["cl_ord_id"],
+                    symbol=record["symbol"],
+                    side=record["side"],
+                    ord_type=record["ord_type"],
+                    order_qty=int(record["order_qty"]),
+                    price=(None if record.get("price") is None
+                           else Decimal(record["price"])),
+                    account=record.get("account"),
+                    cl_ord_id_chain=list(record.get("cl_ord_id_chain") or
+                                         [record["cl_ord_id"]]),
+                    cum_qty=int(record.get("cum_qty", 0)),
+                    leaves_qty=int(record.get("leaves_qty", 0)),
+                    notional=Decimal(record.get("notional", "0")),
+                    ord_status=record.get("ord_status", STATUS_NEW),
+                    fill_price=(None if record.get("fill_price") is None
+                                else Decimal(record["fill_price"])),
+                    price_source=record.get("price_source", ""),
+                    rule_name=record.get("rule_name", ""),
+                    time_in_force=record.get("time_in_force",
+                                             TIME_IN_FORCE_DAY),
+                    expire_at=_from_iso(record.get("expire_at")),
+                    locked=bool(record.get("locked", False)),
+                    trade_date=record.get("trade_date", ""),
+                    restored=True,
+                )
+            except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+                actions.append(Evidence(
+                    "order not restored",
+                    f"{record.get('order_id', '?')}: unreadable record "
+                    f"({type(exc).__name__}: {exc})"))
+                continue
+            for item in record.get("scheduled") or ():
+                self._event_seq += 1
+                if item.get("kind") == EVENT_EXPIRE and order.expire_at:
+                    due = order.expire_at
+                else:
+                    due = now + timedelta(milliseconds=int(
+                        item.get("delay_ms", 0)))
+                order.scheduled.append(ScheduledEvent(
+                    due=due, kind=item.get("kind", "fill"),
+                    shares=int(item.get("shares", 0)),
+                    sequence=self._event_seq))
+            self._orders[order.order_id] = order
+            self._used_cl_ord_ids.update(order.cl_ord_id_chain)
+            actions.append(Evidence(
+                "order restored",
+                f"{order.describe()} {STATUS_NAMES.get(order.ord_status, order.ord_status)} "
+                f"cum={order.cum_qty} leaves={order.leaves_qty} "
+                f"tif={TIF_LABELS.get(order.time_in_force, order.time_in_force)}"
+                f" chain={','.join(order.cl_ord_id_chain)} "
+                f"{len(order.scheduled)} event(s) rescheduled"))
+        return actions
+
+    def on_session_logon(self) -> list:
+        """Run when the session logs on .
+
+        Day orders reloaded from an earlier UTC date expire now, and reloaded
+        market orders still waiting for a price ask for it again.
+        """
+        today = self.clock.now().astimezone(timezone.utc).strftime("%Y%m%d")
+        actions: list = []
+        for order in list(self._orders.values()):
+            if not order.restored or order.closed:
+                continue
+            if order.time_in_force == TIME_IN_FORCE_DAY and order.trade_date \
+                    and order.trade_date < today:
+                actions.extend(self._close_order(
+                    order, STATUS_EXPIRED, ReportKind.EXPIRED,
+                    f"Day order from {order.trade_date} expired after restart",
+                    "day order from an earlier date expired on logon"))
+                continue
+            if order.price_pending:
+                actions.append(RequestPrice(order.order_id, order.symbol))
+        return actions
+
+    # ------------------------------------- H: OrderStatusRequest 
+
+    def _find_for_status(self, msg):
+        order_id = msg.get(TAG_ORDER_ID)
+        if order_id and order_id in self._orders:
+            return self._orders[order_id]
+        cl_ord_id = msg.get(TAG_CL_ORD_ID)
+        order = self._find_by_cl_ord_id(cl_ord_id)
+        if order is not None:
+            return order
+        for candidate in self._orders.values():
+            if cl_ord_id in candidate.cl_ord_id_chain:
+                return candidate
+        return None
+
+    def _on_status_request(self, msg) -> list:
+        """Answer with an ER that says where the order stands, changing
+        nothing: 4.2 20=3 with ExecType = OrdStatus, 4.4 150=I."""
+        order = self._find_for_status(msg)
+        req_id = msg.get(TAG_ORD_STATUS_REQ_ID)
+        if order is None:
+            report = ExecReport(
+                kind=ReportKind.STATUS, order_id="NONE",
+                cl_ord_id=msg.get(TAG_CL_ORD_ID) or "",
+                exec_id=self._next_exec_id(),
+                symbol=msg.get(TAG_SYMBOL) or "", side=msg.get(TAG_SIDE) or "",
+                order_qty="0", ord_type=msg.get(TAG_ORD_TYPE),
+                ord_status=STATUS_REJECTED, leaves_qty="0", cum_qty="0",
+                avg_px=fmt_avg(ZERO), transact_time=format_time(self.clock.now()),
+                text="Unknown order", ord_status_req_id=req_id,
+            )
+            line = (f"{'STATUS':<5} 11={msg.get(TAG_CL_ORD_ID)} 37="
+                    f"{msg.get(TAG_ORDER_ID) or '-'} -> unknown order")
+            return [AppSend(MSG_EXECUTION_REPORT,
+                            self.profile.render_exec_report(report)),
+                    Evidence("order status request", "unknown order"),
+                    Evidence("order lifecycle", line)]
+        report = ExecReport(
+            kind=ReportKind.STATUS, order_id=order.order_id,
+            cl_ord_id=order.cl_ord_id, exec_id=self._next_exec_id(),
+            account=order.account or None, symbol=order.symbol,
+            side=order.side, order_qty=str(order.order_qty),
+            ord_type=order.ord_type, ord_status=order.ord_status,
+            price=fmt_price(order.price) if order.price is not None else None,
+            leaves_qty=str(order.leaves_qty), cum_qty=str(order.cum_qty),
+            avg_px=fmt_avg(order.avg_px),
+            transact_time=format_time(self.clock.now()),
+            ord_status_req_id=req_id,
+        )
+        status = STATUS_NAMES.get(order.ord_status, order.ord_status)
+        line = (f"{'STATUS':<5} {order.order_id} 11={order.cl_ord_id} -> "
+                f"{status} cum={order.cum_qty} leaves={order.leaves_qty}")
+        return [AppSend(MSG_EXECUTION_REPORT,
+                        self.profile.render_exec_report(report)),
+                Evidence("order status request",
+                         f"{order.order_id} {status}", order=order.snapshot()),
+                Evidence("order lifecycle", line)]
+

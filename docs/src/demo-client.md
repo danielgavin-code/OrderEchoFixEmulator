@@ -20,6 +20,7 @@ line, and it answers TestRequests.
 |---|---|
 | `order <SYM> <QTY> <side> <type> [PX]` | Send one NewOrderSingle and wait for it to settle |
 | `cancel-demo <SYM> <QTY> <side> <type> [PX]` | Send an order, then cancel it |
+| `query <ClOrdID> <SYM> <side>` | Send an OrderStatusRequest (`35=H`) and print the answer |
 | `session` | Stay connected and take typed commands |
 
 Side is `buy`, `sell`, `sellshort` or `sellshortexempt`. Type is `limit`/`lmt`
@@ -37,6 +38,21 @@ cancel is acked or rejected.
 
 `--no-exit` keeps the connection open after a one-shot command settles, and
 takes typed commands instead of logging out.
+
+`order` and `cancel-demo` also take:
+
+| Option | Sends |
+|---|---|
+| `--tif day\|gtc\|ioc\|fok\|gtx\|gtd` | TimeInForce (59) |
+| `--expire-time YYYYMMDD-HH:MM:SS` | ExpireTime (126), for `--tif gtd` |
+| `--expire-date YYYYMMDD` | ExpireDate (432), for `--tif gtd` |
+| `--account ACCT` | Account (1), for an engine with `orders.valid_accounts` |
+
+```sh
+.venv/bin/python orderecho_DemoClient.py --session agent42 order ZWZZT 100 buy lmt 10.00 --tif ioc --account CERT1
+.venv/bin/python orderecho_DemoClient.py --session agent42 order ZWZZT 100 buy lmt 10.00 --tif gtd --expire-time 20261001-15:00:00 --account CERT1
+.venv/bin/python orderecho_DemoClient.py --session agent42 query DEMO-1790477068566-1 ZWZZT buy
+```
 
 ## Global options
 
@@ -77,7 +93,8 @@ messages as they arrive:
 
 | Command | Does |
 |---|---|
-| `order <SYM> <QTY> <buy\|sell> <mkt\|lmt> [PX]` | Send a NewOrderSingle |
+| `order <SYM> <QTY> <buy\|sell> <mkt\|lmt> [PX] [tif=..] [expire=..] [account=..]` | Send a NewOrderSingle |
+| `query <ClOrdID>` | OrderStatusRequest for one of your orders |
 | `cancel <ClOrdID>` | Cancel one of your orders |
 | `replace <ClOrdID> <QTY> [PX]` | Replace quantity, and price if given |
 | `resend <begin> [end]` | Send a ResendRequest |

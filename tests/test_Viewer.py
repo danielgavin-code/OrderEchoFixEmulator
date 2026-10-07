@@ -277,7 +277,7 @@ async def test_the_engine_serves_the_viewer(engine):
     assert timeline["verdict"] == "PASS"
 
     health = (await http.get("/health")).json()
-    assert health["build"] == "cook8"
+    assert health["build"] == "cook9"
 
 
 async def test_the_engine_gives_a_timeline_for_one_of_its_orders(engine):

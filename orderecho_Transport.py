@@ -8,6 +8,7 @@ logged and closed immediately.
 from __future__ import annotations
 
 import asyncio
+import os
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ from orderecho_FixVersion import profile_for
 from orderecho_Logging import FixMessageLog
 from orderecho_MessageStore import MessageStore
 from orderecho_OrderBook import IdGenerator, OrderBook
+from orderecho_OrderStore import OrderStore
 from orderecho_Pricing import (
     build_price_source,
     quiet_third_party_logging,
@@ -249,12 +251,17 @@ class SessionRuntime:
         self.fix_log = engine.fix_log_for(spec)
 
         self.order_book = None
+        self.order_store = None
         if spec.rules is not None:
+            if getattr(spec.orders, "persist", False):
+                self.order_store = OrderStore(
+                    engine.config.storage.orders_dir, spec.id)
             self.order_book = OrderBook(
                 spec.orders, spec.rules, self.clock, engine.run_id,
                 price_band=spec.price_band, profile=self.profile,
-                id_generator=engine.ids,
+                id_generator=engine.ids, order_store=self.order_store,
             )
+            self._restore_orders()
 
         self.injector = Injector()
         self.messages: deque = deque(maxlen=MESSAGE_RING_SIZE)
@@ -312,6 +319,24 @@ class SessionRuntime:
                 f"message(s) loaded from {self.message_store.path}",
                 session=self.id,
             )
+
+    def _restore_orders(self) -> None:
+        """Bring back the open orders an earlier run persisted."""
+        if self.order_store is None:
+            return
+        try:
+            records = self.order_store.load()
+        except Exception:
+            self.log_exception(f"Could not read {self.order_store.path}")
+            return
+        if not records:
+            return
+        for action in self.order_book.restore(records):
+            self._do_evidence(action)
+        self.log_info(
+            f"Restored {len(records)} open order(s) from "
+            f"{self.order_store.path}"
+        )
 
     def close(self) -> None:
         self.fix_log.close()
@@ -846,6 +871,8 @@ class Transport:
 
         self.servers: dict = {}
         self.port: int | None = None
+        self._stopped: asyncio.Event | None = None
+        self._restarting = False
 
     # ----------------------------------------------------- session lookup
 
@@ -930,12 +957,18 @@ class Transport:
         return handler
 
     async def serve_forever(self) -> None:
+        """Serve until stop().
+
+        The acceptors serve on their own from start(); this only waits, so
+        an in-process restart() can close and reopen them without ending it.
+        """
         if not self.servers:
             await self.start()
-        await asyncio.gather(*(server.serve_forever()
-                               for server in self.servers.values()))
+        if self._stopped is None:
+            self._stopped = asyncio.Event()
+        await self._stopped.wait()
 
-    async def stop(self) -> None:
+    async def _close_servers(self) -> None:
         for runtime in self.runtimes.values():
             runtime.cancel_price_tasks()
         for server in list(self.servers.values()):
@@ -947,7 +980,89 @@ class Transport:
         self.servers = {}
         for runtime in self.runtimes.values():
             await runtime.close_connection()
+
+    async def stop(self) -> None:
+        await self._close_servers()
+        if self._stopped is not None:
+            self._stopped.set()
         self.engine_log.info("Acceptor stopped")
+
+    async def restart(self, text: str = "OrderEcho engine restarting") -> dict:
+        """POST /admin/restart: a graceful restart inside this process.
+
+        Logs every live session out, stops the listeners, reloads the config
+        (from its file, when it came from one) and each session's state from
+        disk -- sequence numbers, message store and, with orders.persist,
+        its open orders -- and starts listening again.  Returns once the
+        listeners are back.
+        """
+        if self._restarting:
+            raise RuntimeError("a restart is already in progress")
+        self._restarting = True
+        try:
+            started = self.clock.now()
+            self.engine_log.info(f"Restart requested: {text}")
+            self.evidence.event("engine restart", text)
+            await self._logout_all(text)
+            await self._close_servers()
+            for runtime in self.runtimes.values():
+                runtime.close()
+
+            config = self.config
+            if config.path and os.path.isfile(config.path):
+                from orderecho_Config import load_config
+                config = load_config(config.path)
+                # Keep listening where we listened: a config that asked for
+                # port 0 got a real one at the first start.
+                bound = {spec.id: spec.session.port
+                         for spec in self.config.sessions}
+                for spec in config.sessions:
+                    if spec.port == 0 and spec.id in bound:
+                        spec.session.port = bound[spec.id]
+            self.config = config
+            self.price_source = build_price_source(
+                config, self.clock, engine_log=self.engine_log)
+            self.runtimes = {spec.id: SessionRuntime(self, spec)
+                             for spec in config.sessions}
+            await self.start()
+            restored = {
+                runtime.id: len([order for order in runtime.order_book.orders()
+                                 if not order.closed])
+                if runtime.order_book is not None else 0
+                for runtime in self.runtimes.values()
+            }
+            took = (self.clock.now() - started).total_seconds()
+            summary = ", ".join(f"{sid}={count}" for sid, count in
+                                restored.items())
+            self.engine_log.info(
+                f"Restart complete in {took:.3f}s; listening on "
+                f"{', '.join(str(port) for port in self.servers)}; open "
+                f"orders restored: {summary}"
+            )
+            self.evidence.event("engine restarted",
+                                f"open orders restored: {summary}")
+            return {"restarted": True, "seconds": round(took, 3),
+                    "ports": sorted(self.servers),
+                    "sessions": list(self.runtimes),
+                    "open_orders": restored}
+        finally:
+            self._restarting = False
+
+    async def _logout_all(self, text: str) -> None:
+        live = [runtime for runtime in self.runtimes.values()
+                if runtime.session_active and runtime._busy]
+        if not live:
+            return
+        self.engine_log.info(
+            f"Initiating logout on {len(live)} session(s): "
+            f"{', '.join(rt.id for rt in live)}"
+        )
+        for runtime in live:
+            runtime.run_session_actions(runtime.session.initiate_logout(text))
+        await asyncio.gather(*(
+            runtime.wait_for_session_end(runtime.config.logout_timeout_sec)
+            for runtime in live
+        ))
 
     def close_logs(self) -> None:
         self.evidence.close()
@@ -1185,20 +1300,5 @@ class Transport:
 
     async def shutdown_gracefully(self, text: str) -> None:
         """Ctrl+C: log every live session out at once, then stop."""
-        live = [runtime for runtime in self.runtimes.values()
-                if runtime.session_active and runtime._busy]
-        if live:
-            self.engine_log.info(
-                f"Initiating logout on {len(live)} session(s): "
-                f"{', '.join(rt.id for rt in live)}"
-            )
-            for runtime in live:
-                runtime.run_session_actions(
-                    runtime.session.initiate_logout(text)
-                )
-            await asyncio.gather(*(
-                runtime.wait_for_session_end(
-                    runtime.config.logout_timeout_sec
-                ) for runtime in live
-            ))
+        await self._logout_all(text)
         await self.stop()

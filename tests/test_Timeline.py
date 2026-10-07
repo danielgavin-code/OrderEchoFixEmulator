@@ -35,11 +35,17 @@ WHEN = datetime(2026, 9, 27, 9, 0, 0, tzinfo=timezone.utc)
 
 
 def line(msg_type, seq, direction="OUT", version="FIX.4.2", fields=None):
-    """One OrderEcho-format log line carrying a well-framed message."""
+    """One OrderEcho-format log line carrying a well-framed message.
+
+    The CompIDs follow the direction, as in a real log: OUT is ours
+    (49=ORDERECHO), IN is the counterparty's (49=AGENT).
+    """
     body = [(int(tag), str(value)) for tag, value in (fields or {}).items()
             if value is not None]
+    sender, target = (("AGENT", "ORDERECHO") if direction == "IN"
+                      else ("ORDERECHO", "AGENT"))
     raw = Codec(version).encode(
-        msg_type, body, sender_comp_id="ORDERECHO", target_comp_id="AGENT",
+        msg_type, body, sender_comp_id=sender, target_comp_id=target,
         seq_num=seq, sending_time=WHEN,
     ).decode("latin-1").replace(SOH, "|")
     stamp = f"20260927-09:00:{seq:02d}.000"

@@ -10,11 +10,25 @@ defaults:                       # every session starts from these
   heartbeat_grace_pct: 20
   logout_timeout_sec: 10
   resend_mode: replay
+  gap_queue: true               # ask for exactly the missing range; hold what arrives early
+  business_reject_ref_id: true  # 379 on a 35=j when the rejected message had an ID
 
+  # This config switches every certification behaviour on, so a cert run
+  # against it can exercise all of it.  The base config leaves them off.
   orders:
     default_delay_ms: 500
-    send_pending_acks: false
+    send_pending_acks: true       # 150=6 / 150=E before cancel / replace acks
     replace_ack_ordstatus: current
+    send_pending_new: true        # 150=A before the 150=0 ack
+    persist: true                 # open orders survive a restart (storage.orders_dir)
+    status_requests: true         # answer OrderStatusRequest (35=H)
+    time_in_force: [day, gtc, ioc, fok, gtx, gtd]
+    ioc_fok_ack: true             # 150=0 before an IOC/FOK's outcome (false: outcome first)
+    # An order that carries tag 1 must name one of these, or it is rejected
+    # (4.2 103=0, 4.4 103=15).  An order without tag 1 is not checked, so a
+    # client that sends no Account is unaffected; case 7.6 sends an unlisted
+    # one to be rejected.
+    valid_accounts: [CERT1, CERT2]
 
   price_band:
     enabled: true
@@ -89,6 +103,7 @@ storage:
   seqnum_dir: data/seqnums
   evidence_dir: data/evidence
   msgstore_dir: data/msgstore
+  orders_dir: data/orders         # open orders, one file per session (orders.persist)
 
 logging:
   log_dir: logs
@@ -107,6 +122,7 @@ pricing:
   cache_seconds: 300
   timeout_sec: 10
   warm_symbols: [AAPL, MSFT, SPY]
+  negative_cache_seconds: 300   # a failed lookup is not retried for this long
   static:
     AAPL: 227.50
     default: 100.00

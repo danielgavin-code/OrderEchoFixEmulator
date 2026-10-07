@@ -53,13 +53,21 @@ ISO_PREFIX = re.compile(
     r"[\s,:|-]*(?P<rest>.*)$"
 )
 
-#: One whole FIX message, whatever the field delimiter is.
-MESSAGE_PATTERN = re.compile(
+#: Where a FIX message starts, and which field delimiter it uses.
+MESSAGE_START = re.compile(
     r"8=FIX(?:T)?\.[\d.]+(?P<delim>\x01|\|(?!\|)|\^A)"   # BeginString + delim
-    r".*?"
-    r"10=\d{1,3}(?P=delim)",
-    re.DOTALL,
 )
+
+#: BodyLength right after the BeginString.
+BODY_LENGTH = re.compile(r"9=(?P<length>\d+)")
+
+#: The CheckSum field's value.
+TRAILER_VALUE = re.compile(r"10=\d{1,3}")
+
+#: The byte encodings a log may have written a message's text in: latin-1
+#: (one character per wire byte, how this emulator logs what it sends and
+#: receives) and UTF-8 (bytes written as they were, how other engines log).
+BYTE_ENCODINGS = ("latin-1", "utf-8")
 
 #: Our FIX log names its file <session>_<YYYYMMDD>.log.
 FIX_LOG_NAME = re.compile(r"^(?P<session>.+)_(?P<date>\d{8})\.log$")
@@ -231,8 +239,31 @@ def verify_framing(raw: str):
 
     A wrong BodyLength or CheckSum is information, not a reason to drop the
     message, so this only reports.
+
+    BodyLength and CheckSum are about the message's *bytes*, so they are
+    checked over the bytes the log's text stands for -- never over a
+    re-encoding that changes them.  A log written by this emulator holds one
+    character per wire byte (latin-1); one written byte for byte by another
+    engine is UTF-8.  A message whose framing is consistent under either is
+    correctly framed, so a non-ASCII value (58=reçu) is not flagged.
     """
-    data = raw.encode("latin-1", "replace")
+    first = None
+    for encoding in BYTE_ENCODINGS:
+        try:
+            data = raw.encode(encoding)
+        except UnicodeEncodeError:
+            continue
+        result = _verify_bytes(data)
+        if result == (False, False):
+            return result
+        if first is None:
+            first = result
+    if first is None:
+        return _verify_bytes(raw.encode("latin-1", "replace"))
+    return first
+
+
+def _verify_bytes(data: bytes):
     bad_length = bad_checksum = False
     try:
         after_begin = data.index(b"\x01") + 1
@@ -260,12 +291,68 @@ def normalize(raw: str, delimiter: str) -> str:
     return raw.replace(delimiter, SOH)
 
 
+def _byte_length(text: str, encoding: str):
+    try:
+        return len(text.encode(encoding))
+    except UnicodeEncodeError:
+        return None
+
+
+def _message_end(text: str, after_begin: int, delim: str):
+    """Where the message whose BeginString ends at *after_begin* ends.
+
+    Framed by BodyLength first: the CheckSum field must start exactly
+    BodyLength bytes after the BodyLength field.  When it does not (a wrong
+    BodyLength is information worth keeping), the message ends at the first
+    `10=` that *starts a field* -- never at the tail of 110=, 210= or 1010=.
+    Returns None when no trailer follows at all.
+    """
+    length = BODY_LENGTH.match(text, after_begin)
+    if length is not None and text.startswith(delim, length.end()):
+        body_start = length.end() + len(delim)
+        declared = int(length.group("length"))
+        for encoding in BYTE_ENCODINGS:
+            # Walk forward to the character where `declared` bytes end.
+            position, counted = body_start, 0
+            while counted < declared and position < len(text):
+                size = _byte_length(text[position], encoding)
+                if size is None:
+                    break
+                counted += size
+                position += 1
+            if counted != declared:
+                continue
+            trailer = TRAILER_VALUE.match(text, position)
+            if trailer is not None and text.startswith(delim, trailer.end()) \
+                    and text.endswith(delim, 0, position):
+                return trailer.end() + len(delim)
+    # BodyLength missing or wrong: the first CheckSum that starts a field.
+    search_from = after_begin - len(delim)
+    while True:
+        index = text.find(delim + "10=", search_from)
+        if index == -1:
+            return None
+        trailer = TRAILER_VALUE.match(text, index + len(delim))
+        if trailer is not None and text.startswith(delim, trailer.end()):
+            return trailer.end() + len(delim)
+        search_from = index + len(delim)
+
+
 def find_messages(text: str) -> list:
     """Every FIX message embedded in a line, with its delimiter."""
     found = []
-    for match in MESSAGE_PATTERN.finditer(text):
-        found.append((match.group(0), match.group("delim")))
-    return found
+    position = 0
+    while True:
+        start = MESSAGE_START.search(text, position)
+        if start is None:
+            return found
+        delim = start.group("delim")
+        end = _message_end(text, start.end(), delim)
+        if end is None:
+            position = start.end()
+            continue
+        found.append((text[start.start():end], delim))
+        position = end
 
 
 # --------------------------------------------------------------- the parser

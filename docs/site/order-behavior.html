@@ -10,7 +10,7 @@
 <div class="shell">
 <aside class="sidebar">
 <a class="brand" href="index.html">OrderEchoFixEmulator</a>
-<span class="version">0.8.0 (cook8)</span>
+<span class="version">0.9.0 (cook9)</span>
 <nav aria-label="Guide">
 <ol>
 <li><a href="index.html">Overview</a></li>
@@ -126,6 +126,142 @@ They do not survive a restart.</p>
   send_pending_acks: false        # send 150=6 / 150=E before cancel / replace acks
   replace_ack_ordstatus: current  # current | replaced
 </code></pre>
+<h2 id="certification-behaviours">Certification behaviours</h2>
+<p>The behaviours below exist so a client can certify every row of a venue
+checklist against the emulator. <strong>Each one is off in <code>config/orderecho.yaml</code></strong>,
+which still answers exactly as 0.8.0 did, and <strong>all of them are on in
+<code>config/orderecho_multi.yaml</code></strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Off (the default)</th>
+<th>On</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>orders.time_in_force</code></td>
+<td><code>[day]</code>: any other <code>59</code> is rejected, <code>58=TimeInForce not supported</code></td>
+<td>the listed TimeInForce values are accepted</td>
+</tr>
+<tr>
+<td><code>orders.send_pending_new</code></td>
+<td>the ack is the first report</td>
+<td><code>150=A 39=A</code> (Pending New) comes first</td>
+</tr>
+<tr>
+<td><code>orders.valid_accounts</code></td>
+<td><code>[]</code>: tag 1 is not checked</td>
+<td>tag 1, when present, must be one of the list</td>
+</tr>
+<tr>
+<td><code>orders.status_requests</code></td>
+<td><code>35=H</code> gets a <code>35=j</code></td>
+<td><code>35=H</code> is answered</td>
+</tr>
+<tr>
+<td><code>orders.persist</code></td>
+<td>orders live for one run</td>
+<td>open orders survive a restart</td>
+</tr>
+<tr>
+<td><code>orders.send_pending_acks</code></td>
+<td>(since 0.4.0)</td>
+<td><code>150=6</code> / <code>150=E</code> before cancel / replace acks</td>
+</tr>
+</tbody>
+</table>
+<h3 id="time-in-force">Time in force</h3>
+<p><code>orders.time_in_force</code> lists the values accepted, by name: <code>day</code>, <code>gtc</code>, <code>ioc</code>,
+<code>fok</code>, <code>gtx</code>, <code>gtd</code>. A <code>59</code> that is absent means Day. The band and the rule
+still come first — band, then rule, then TimeInForce — so a <code>reject</code> rule
+rejects whatever the TimeInForce.</p>
+<table>
+<thead>
+<tr>
+<th>TimeInForce</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Day <code>0</code>, GTC <code>1</code>, GTX <code>5</code></td>
+<td>As a Day order: the rule's schedule runs. A GTC order persists across restarts (with <code>orders.persist</code>); GTX is treated as Day, since the emulator has no extended hours.</td>
+</tr>
+<tr>
+<td>IOC <code>3</code></td>
+<td>The rule's <em>immediate</em> outcome happens at once — <code>full_fill</code>: one full fill; <code>partial_fill</code>: its first fill only; <code>ack_only</code> or <code>cancel_after_ack</code>: nothing — then whatever is left is canceled at once: <code>150=4 39=4 58=IOC remainder canceled</code>.</td>
+</tr>
+<tr>
+<td>FOK <code>4</code></td>
+<td>If the rule would fill the whole quantity (<code>full_fill</code>, or <code>partial_fill</code> with <code>then: fill_rest</code>), one immediate full fill. Otherwise <code>150=4 39=4 58=FOK not fully fillable</code>, with CumQty 0: never a partial fill.</td>
+</tr>
+<tr>
+<td>GTD <code>6</code></td>
+<td>As Day until it expires, then <code>150=C 39=C</code> (Expired), LeavesQty 0, and any fills still scheduled are dropped. It needs <code>126</code> ExpireTime (UTC) or <code>432</code> ExpireDate (the order lives through that whole UTC day); without either it gets a session Reject <code>373=1 371=126</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>IOC and FOK are both acknowledged (<code>150=0</code>) before their outcome. With
+<code>orders.ioc_fok_ack: false</code> the acknowledgement is left out and the fill, cancel
+or kill is the first report (after Pending New, if that is on). A market IOC
+or FOK fills when its quote arrives; if it has nothing to fill, its cancel does
+not wait for the quote.</p>
+<h3 id="lifecycle-states">Lifecycle states</h3>
+<table>
+<thead>
+<tr>
+<th>Report</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pending New <code>150=A 39=A</code></td>
+<td>Before every accepted order's ack, with <code>orders.send_pending_new</code>.</td>
+</tr>
+<tr>
+<td>Done For Day <code>150=3 39=3</code></td>
+<td><code>POST /orders/{order_id}/done-for-day</code>: LeavesQty 0, the order is closed.</td>
+</tr>
+<tr>
+<td>Expired <code>150=C 39=C</code></td>
+<td>A GTD order's expiry, or <code>POST /orders/{order_id}/expire</code> for any open order.</td>
+</tr>
+<tr>
+<td>Too late to cancel <code>35=9 102=0</code></td>
+<td><code>POST /orders/{order_id}/lock</code> puts an open order in "fill in progress": a cancel or replace is refused until <code>POST /orders/{order_id}/unlock</code>, or the order's next fill or terminal event, clears it.</td>
+</tr>
+</tbody>
+</table>
+<p>The ExecType and OrdStatus values <code>3</code>, <code>A</code> and <code>C</code> are the same in FIX 4.2 and
+4.4.</p>
+<h3 id="accounts">Accounts</h3>
+<p>With <code>orders.valid_accounts: [CERT1, CERT2]</code>, an order whose tag 1 names an
+account not in the list is rejected: <code>35=8 39=8</code>, <code>103=0</code> in FIX 4.2 (it has no
+closer code) and <code>103=15</code> (Unknown account(s)) in FIX 4.4, with
+<code>58=Unknown account &lt;x&gt;</code>. An order <strong>without</strong> tag 1 is not checked. An empty
+list means no check at all.</p>
+<p><code>config/orderecho_multi.yaml</code> lists <code>CERT1</code> and <code>CERT2</code>, so a client that sends
+no Account is unaffected, and the "invalid Account" case (7.6 in the OrderEcho
+agent's suite) is rejected.</p>
+<h3 id="order-status-requests">Order status requests</h3>
+<p>With <code>orders.status_requests</code>, an OrderStatusRequest (<code>35=H</code>: <code>11</code>, <code>55</code>, <code>54</code>,
+optionally <code>37</code>) is answered with one ExecutionReport saying where the order
+stands, and changes nothing. FIX 4.2 sends <code>20=3</code> (Status) with ExecType equal
+to the current OrdStatus; FIX 4.4 sends <code>150=I</code> (Order Status) and echoes
+<code>790</code> OrdStatusReqID. The order is found by <code>37</code>, its current ClOrdID, or any
+ClOrdID it has had. An unknown order gets <code>37=NONE 39=8 58=Unknown order</code>.</p>
+<h3 id="open-orders-across-restarts">Open orders across restarts</h3>
+<p>With <code>orders.persist</code>, every change to an open order is appended to
+<code>&lt;storage.orders_dir&gt;/&lt;session-id&gt;.jsonl</code> (default <code>data/orders/</code>); the file
+is compacted on every load and every 200 writes. On startup — or after
+<code>POST /admin/restart</code> — every open order comes back with its state, its whole
+ClOrdID chain and its OrderID, so a cancel by an earlier ClOrdID still works,
+and a reused ClOrdID is still a duplicate. Fills that were scheduled resume
+relative to the reload. A Day order from an earlier UTC date is expired
+(<code>150=C</code>) when its session next logs on.</p>
 <h2 id="the-shipped-rules">The shipped rules</h2>
 <p>Every first letter has a different personality, so a client can be exercised
 without editing config. Both the default and the multi-session config ship with
@@ -287,6 +423,11 @@ profiles.</p>
 <td><code>0</code> Broker/Exchange Option</td>
 <td><code>0</code> Broker/Exchange Option</td>
 </tr>
+<tr>
+<td>UNKNOWN_ACCOUNT</td>
+<td><code>0</code> Broker/Exchange Option</td>
+<td><code>15</code> Unknown Account</td>
+</tr>
 </tbody>
 </table>
 <h3 id="ordercancelreject-rejects-tag-102">OrderCancelReject rejects (tag 102)</h3>
@@ -341,7 +482,7 @@ profiles.</p>
 </tbody>
 </table>
 <div class="footer">
-OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+OrderEchoFixEmulator 0.9.0 (cook9). Reference tables on this page are generated
 from the code by <code>orderecho_BuildDocs.py</code>.
 </div>
 </main>

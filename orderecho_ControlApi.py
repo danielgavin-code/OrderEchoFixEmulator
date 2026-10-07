@@ -245,8 +245,11 @@ def build_app(transport) -> FastAPI:
             raise ApiError(exc.code, exc.detail) from exc
         sent = runtime.run_app_actions(actions)
         order = book.get_order(order_id)
-        return {"session": runtime.id,
+        body = {"session": runtime.id,
                 "order": order.snapshot() if order else None, "sent": sent}
+        if order is not None:
+            body["locked"] = order.locked
+        return body
 
     # -------------------------------------------------------- §5 orders
 
@@ -289,6 +292,50 @@ def build_app(transport) -> FastAPI:
         note(request)
         return run_order_action(request, order_id,
                                 lambda book: book.hold(order_id))
+
+    @app.post("/orders/{order_id}/done-for-day")
+    async def done_for_day(order_id: str, request: Request):
+        """End the order's trading day: 150=3 39=3, LeavesQty 0, closed."""
+        note(request)
+        return run_order_action(request, order_id,
+                                lambda book: book.done_for_day(order_id))
+
+    @app.post("/orders/{order_id}/expire")
+    async def expire_order(order_id: str, request: Request):
+        """Expire an open order by hand: 150=C 39=C, LeavesQty 0, closed."""
+        note(request)
+        return run_order_action(request, order_id,
+                                lambda book: book.expire(order_id))
+
+    @app.post("/orders/{order_id}/lock")
+    async def lock_order(order_id: str, request: Request):
+        """Put the order in "fill in progress": a cancel or replace now gets
+        35=9 102=0 (Too late to cancel) until unlock or the next fill or
+        terminal event."""
+        note(request)
+        return run_order_action(request, order_id,
+                                lambda book: book.lock(order_id))
+
+    @app.post("/orders/{order_id}/unlock")
+    async def unlock_order(order_id: str, request: Request):
+        """Take the order out of "fill in progress"."""
+        note(request)
+        return run_order_action(request, order_id,
+                                lambda book: book.unlock(order_id))
+
+    # ---------------------------------------------------------- admin
+
+    @app.post("/admin/restart")
+    async def admin_restart(request: Request):
+        """Restart the engine inside this process: log every session out,
+        stop the listeners, reload config and state from disk (open orders
+        too, with orders.persist), listen again.  Returns once the listeners
+        are back."""
+        note(request)
+        try:
+            return await transport.restart("Engine restart via control API")
+        except RuntimeError as exc:
+            raise ApiError("conflict", str(exc)) from exc
 
     # ------------------------------------------------------- session
 

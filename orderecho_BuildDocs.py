@@ -118,7 +118,8 @@ def _sample_report(full: bool) -> ExecReport:
     if not full:
         return ExecReport(**common)
     return ExecReport(price="10.00", orig_cl_ord_id="C-0", account="ACCT",
-                      reason=Reason.RULE_REJECT, text="because", **common)
+                      reason=Reason.RULE_REJECT, text="because",
+                      ord_status_req_id="REQ-1", **common)
 
 
 def generate_er_fields() -> str:

@@ -157,3 +157,13 @@ tests wrote to the repository's own data/ or logs/
 A test built its config without `tests/isolation.isolated_config`. Every test
 must put its storage paths under `tmp_path`; the guard exists because a test
 that writes to the real `data/` corrupts the next run's sequence numbers.
+
+If the message instead reads
+
+```
+a running emulator, pid 14395, is writing to repo data/logs; stop it before running tests
+```
+
+no test is at fault: an emulator started from the repo is running and writing
+its own logs and sequence numbers. Stop it (Ctrl+C in its terminal, or
+`kill <pid>`) and run the tests again, or run it from a copy of the repo.

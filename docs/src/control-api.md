@@ -111,6 +111,29 @@ curl -sX POST localhost:8090/orders/O-20260927-093636-1/cancel \
      -H 'content-type: application/json' -d '{"text": "pulled by hand"}'
 ```
 
+**Lifecycle states, as a venue would send them:**
+
+```sh
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/done-for-day  # 150=3 39=3
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/expire        # 150=C 39=C
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/lock          # cancels now get 102=0
+curl -sX POST localhost:8090/orders/O-20260927-093636-1/unlock
+```
+
+Like the other order routes, these check the order first: an unknown order is
+`404`, a closed one `409`, whether or not a session is logged on.
+
+**Restart the engine without stopping the process:**
+
+```sh
+curl -sX POST localhost:8090/admin/restart
+```
+
+Every live session is logged out, the listeners stop, the config and every
+session's state are reloaded from disk — open orders too, with
+`orders.persist` — and the listeners start again on the same ports. The call
+returns once they are back, with how many open orders each session has.
+
 **Drive the session:**
 
 ```sh

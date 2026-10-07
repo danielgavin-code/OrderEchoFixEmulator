@@ -10,7 +10,7 @@
 <div class="shell">
 <aside class="sidebar">
 <a class="brand" href="index.html">OrderEchoFixEmulator</a>
-<span class="version">0.8.0 (cook8)</span>
+<span class="version">0.9.0 (cook9)</span>
 <nav aria-label="Guide">
 <ol>
 <li><a href="index.html">Overview</a></li>
@@ -62,6 +62,10 @@ certification target.</p>
 <tr>
 <td>Outbound messages, for a real resend</td>
 <td><code>data/msgstore/&lt;session-id&gt;.jsonl</code></td>
+</tr>
+<tr>
+<td>Open orders, with <code>orders.persist</code></td>
+<td><code>data/orders/&lt;session-id&gt;.jsonl</code></td>
 </tr>
 </tbody>
 </table>
@@ -202,7 +206,7 @@ repository's own <code>data/</code> or <code>logs/</code>. Tests build their con
 <code>tests/isolation.isolated_config</code>, which puts every storage path under the
 test's temporary directory.</p>
 <div class="footer">
-OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+OrderEchoFixEmulator 0.9.0 (cook9). Reference tables on this page are generated
 from the code by <code>orderecho_BuildDocs.py</code>.
 </div>
 </main>

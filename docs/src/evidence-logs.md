@@ -14,6 +14,7 @@ certification target.
 | Evidence | `data/evidence/<run_id>.jsonl` |
 | Sequence numbers | `data/seqnums/<session-id>.json` |
 | Outbound messages, for a real resend | `data/msgstore/<session-id>.jsonl` |
+| Open orders, with `orders.persist` | `data/orders/<session-id>.jsonl` |
 
 `data/` and `logs/` are created at startup and are gitignored. The evidence
 file and the engine log are one per engine, not one per session; every record

@@ -10,7 +10,7 @@
 <div class="shell">
 <aside class="sidebar">
 <a class="brand" href="index.html">OrderEchoFixEmulator</a>
-<span class="version">0.8.0 (cook8)</span>
+<span class="version">0.9.0 (cook9)</span>
 <nav aria-label="Guide">
 <ol>
 <li><a href="index.html">Overview</a></li>
@@ -57,6 +57,10 @@ line, and it answers TestRequests.</p>
 <td>Send an order, then cancel it</td>
 </tr>
 <tr>
+<td><code>query &lt;ClOrdID&gt; &lt;SYM&gt; &lt;side&gt;</code></td>
+<td>Send an OrderStatusRequest (<code>35=H</code>) and print the answer</td>
+</tr>
+<tr>
 <td><code>session</code></td>
 <td>Stay connected and take typed commands</td>
 </tr>
@@ -73,6 +77,37 @@ soon as its order is Filled, Canceled or Rejected; <code>cancel-demo</code> as s
 cancel is acked or rejected.</p>
 <p><code>--no-exit</code> keeps the connection open after a one-shot command settles, and
 takes typed commands instead of logging out.</p>
+<p><code>order</code> and <code>cancel-demo</code> also take:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Sends</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--tif day\|gtc\|ioc\|fok\|gtx\|gtd</code></td>
+<td>TimeInForce (59)</td>
+</tr>
+<tr>
+<td><code>--expire-time YYYYMMDD-HH:MM:SS</code></td>
+<td>ExpireTime (126), for <code>--tif gtd</code></td>
+</tr>
+<tr>
+<td><code>--expire-date YYYYMMDD</code></td>
+<td>ExpireDate (432), for <code>--tif gtd</code></td>
+</tr>
+<tr>
+<td><code>--account ACCT</code></td>
+<td>Account (1), for an engine with <code>orders.valid_accounts</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-sh">.venv/bin/python orderecho_DemoClient.py --session agent42 order ZWZZT 100 buy lmt 10.00 --tif ioc --account CERT1
+.venv/bin/python orderecho_DemoClient.py --session agent42 order ZWZZT 100 buy lmt 10.00 --tif gtd --expire-time 20261001-15:00:00 --account CERT1
+.venv/bin/python orderecho_DemoClient.py --session agent42 query DEMO-1790477068566-1 ZWZZT buy
+</code></pre>
 <h2 id="global-options">Global options</h2>
 <table>
 <thead>
@@ -129,8 +164,12 @@ messages as they arrive:</p>
 </thead>
 <tbody>
 <tr>
-<td><code>order &lt;SYM&gt; &lt;QTY&gt; &lt;buy\|sell&gt; &lt;mkt\|lmt&gt; [PX]</code></td>
+<td><code>order &lt;SYM&gt; &lt;QTY&gt; &lt;buy\|sell&gt; &lt;mkt\|lmt&gt; [PX] [tif=..] [expire=..] [account=..]</code></td>
 <td>Send a NewOrderSingle</td>
+</tr>
+<tr>
+<td><code>query &lt;ClOrdID&gt;</code></td>
+<td>OrderStatusRequest for one of your orders</td>
 </tr>
 <tr>
 <td><code>cancel &lt;ClOrdID&gt;</code></td>
@@ -183,7 +222,7 @@ useful counterparty to the emulator: logon, heartbeats, TestRequest replies,
 orders, cancels, replaces and ResendRequests. Sequence-number recovery,
 persistence and reconnection are the emulator's job here, not the demo's.</p>
 <div class="footer">
-OrderEchoFixEmulator 0.8.0 (cook8). Reference tables on this page are generated
+OrderEchoFixEmulator 0.9.0 (cook9). Reference tables on this page are generated
 from the code by <code>orderecho_BuildDocs.py</code>.
 </div>
 </main>

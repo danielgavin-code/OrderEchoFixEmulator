@@ -95,6 +95,20 @@ Anything not under `defaults:` or a session entry — `storage`, `logging`,
 Pricing and its cache are engine-wide on purpose: two sessions asking about the
 same symbol should not disagree.
 
+## Certification behaviours
+
+Several keys switch on what a full certification run needs: other
+TimeInForce values, Pending New, account checks, status requests, open orders
+across restarts, the gap queue and `379` on a business reject. Each is off by
+default — `config/orderecho.yaml` answers exactly as before — and all are on
+in `config/orderecho_multi.yaml`. See
+[Order behavior](order-behavior.html#certification-behaviours) and
+[Session protocol](session-protocol.html#the-gap-queue).
+
+`pricing.negative_cache_seconds` (default 300) is on everywhere: a live price
+lookup that fails is not retried for that long, so only the first order for an
+unpriceable symbol waits for the timeout.
+
 ## Full key reference
 
 Generated from the config schema in `orderecho_Config.py`, so it cannot drift

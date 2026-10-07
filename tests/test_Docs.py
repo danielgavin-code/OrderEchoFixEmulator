@@ -250,9 +250,17 @@ def test_every_cli_subcommand_mentioned_exists():
     source = all_source_text()
     for name in re.findall(r"orderecho_LogView\.py (\w+)", source):
         assert name in subcommands, name
+    import orderecho_DemoClient
+
+    demo = set()
+    for action in orderecho_DemoClient.build_parser()._actions:
+        if hasattr(action, "choices") and isinstance(action.choices, dict):
+            demo |= set(action.choices)
+    for name in ("order", "cancel-demo", "session", "query"):
+        assert name in demo
     for name in re.findall(r"orderecho_DemoClient\.py (?:--\S+ \S+ )*([\w-]+)",
                            source):
-        assert name in ("order", "cancel-demo", "session"), name
+        assert name in demo, name
 
 
 def test_every_config_key_mentioned_exists():

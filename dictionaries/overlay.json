@@ -10,7 +10,8 @@
     "32": {
       "name": "LastQty",
       "versions": { "FIX.4.0": "LastShares", "FIX.4.1": "LastShares", "FIX.4.2": "LastShares" }
-    }
+    },
+    "790": { "name": "OrdStatusReqID" }
   },
   "enums": {
     "35": {
@@ -18,7 +19,8 @@
       "3": "Reject", "4": "SequenceReset", "5": "Logout", "A": "Logon",
       "D": "NewOrderSingle", "F": "OrderCancelRequest",
       "G": "OrderCancelReplaceRequest", "8": "ExecutionReport",
-      "9": "OrderCancelReject", "j": "BusinessMessageReject"
+      "9": "OrderCancelReject", "j": "BusinessMessageReject",
+      "H": "OrderStatusRequest"
     },
     "39": {
       "0": "New", "1": "PartiallyFilled", "2": "Filled", "3": "DoneForDay",
